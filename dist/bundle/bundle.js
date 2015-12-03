@@ -1,46 +1,7 @@
 (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(require,module,exports){
-// app.js
-window.bongiovi = require("./libs/bongiovi.js");
-var dat = require("dat-gui");
-
-(function() {
-	var SceneApp = require("./SceneApp");
-
-	App = function() {
-		if(document.body) this._init();
-		else {
-			window.addEventListener("load", this._init.bind(this));
-		}
-	}
-
-	var p = App.prototype;
-
-	p._init = function() {
-		this.canvas = document.createElement("canvas");
-		this.canvas.width = window.innerWidth;
-		this.canvas.height = window.innerHeight;
-		this.canvas.className = "Main-Canvas";
-		document.body.appendChild(this.canvas);
-		bongiovi.GL.init(this.canvas);
-
-		this._scene = new SceneApp();
-		bongiovi.Scheduler.addEF(this, this._loop);
-
-		// this.gui = new dat.GUI({width:300});
-	};
-
-	p._loop = function() {
-		this._scene.loop();
-	};
-
-})();
-
-
-new App();
-},{"./SceneApp":5,"./libs/bongiovi.js":6,"dat-gui":2}],2:[function(require,module,exports){
 module.exports = require('./vendor/dat.gui')
 module.exports.color = require('./vendor/dat.color')
-},{"./vendor/dat.color":3,"./vendor/dat.gui":4}],3:[function(require,module,exports){
+},{"./vendor/dat.color":2,"./vendor/dat.gui":3}],2:[function(require,module,exports){
 /**
  * dat-gui JavaScript Controller Library
  * http://code.google.com/p/dat-gui
@@ -796,7 +757,7 @@ dat.color.math = (function () {
 })(),
 dat.color.toString,
 dat.utils.common);
-},{}],4:[function(require,module,exports){
+},{}],3:[function(require,module,exports){
 /**
  * dat-gui JavaScript Controller Library
  * http://code.google.com/p/dat-gui
@@ -4457,10 +4418,12 @@ dat.dom.CenteredDiv = (function (dom, common) {
 dat.utils.common),
 dat.dom.dom,
 dat.utils.common);
-},{}],5:[function(require,module,exports){
+},{}],4:[function(require,module,exports){
 // SceneApp.js
 
 var GL = bongiovi.GL, gl;
+var ViewPlane = require("./ViewPlane");
+var ViewGodRay = require("./ViewGodRay");
 
 function SceneApp() {
 	gl = GL.gl;
@@ -4474,17 +4437,34 @@ var p = SceneApp.prototype = new bongiovi.Scene();
 
 p._initTextures = function() {
 	console.log('Init Textures');
+	this._texture = new bongiovi.GLTexture(images.forestSpirit);
+	this._fboRender = new bongiovi.FrameBuffer(GL.width, GL.height);
 };
 
 p._initViews = function() {
 	console.log('Init Views');
-	this._vAxis = new bongiovi.ViewAxis();
+	this._vAxis     = new bongiovi.ViewAxis();
 	this._vDotPlane = new bongiovi.ViewDotPlane();
+	
+	this._vPlane    = new ViewPlane();
+	this._vCopy     = new bongiovi.ViewCopy();
+	this._vGodRay 	= new ViewGodRay();
 };
 
 p.render = function() {
-	this._vAxis.render();
+
+	this._fboRender.bind();
+	GL.clear(0, 0, 0, 0);
+	// this._vAxis.render();
 	this._vDotPlane.render();
+	this._vPlane.render(this._texture);
+
+	this._fboRender.unbind();
+
+
+	GL.setMatrices(this.cameraOrtho);
+	GL.rotate(this.rotationFront);
+	this._vGodRay.render(this._fboRender.getTexture());
 };
 
 p.resize = function() {
@@ -4493,7 +4473,137 @@ p.resize = function() {
 };
 
 module.exports = SceneApp;
+},{"./ViewGodRay":5,"./ViewPlane":6}],5:[function(require,module,exports){
+// ViewGodRay.js
+
+var GL = bongiovi.GL;
+var gl;
+
+
+function ViewGodRay() {
+	this.count = 0;
+	bongiovi.View.call(this, null, "#define GLSLIFY 1\n#define SHADER_NAME SIMPLE_TEXTURE\n\nprecision highp float;\nvarying vec2 vTextureCoord;\nuniform sampler2D texture;\nuniform float time;\nuniform float density;\nuniform float weight;\nuniform float decay;\n\n\nconst vec2 lightPosition = vec2(.5);\nconst float NUM_SAMPLES = 20.0;\n\nfloat hash( vec2 p ) {\n\tfloat h = dot(p,vec2(127.1,311.7));\t\n    return fract(sin(h)*43758.5453123);\n}\n\n\nfloat noise( in vec2 p ) {\n    vec2 i = floor( p );\n    vec2 f = fract( p );\t\n\tvec2 u = f*f*(3.0-2.0*f);\n    return -1.0+2.0*mix( mix( hash( i + vec2(0.0,0.0) ), \n                     hash( i + vec2(1.0,0.0) ), u.x),\n                mix( hash( i + vec2(0.0,1.0) ), \n                     hash( i + vec2(1.0,1.0) ), u.x), u.y);\n}\n\nvec4 godray() {\n\n\tfloat x = cos(time) * .2 + .5;\n\tfloat y = sin(time) * .2 + .5;\n\n\tvec2 deltaTextCoord = vec2(vTextureCoord - vec2(x, y));\n\tvec2 textCoord = vTextureCoord;\n\tdeltaTextCoord *= 1.0/ NUM_SAMPLES * density;\n\tfloat illuminationDecay = 1.0;\n\tvec2 textCoordNoise;\n\tvec4 color = vec4(0.0);\n\n\t\n\tfor(float i=0.0; i<NUM_SAMPLES; i++) {\n\t\ttextCoord -= deltaTextCoord;\n\t\tvec4 texel = texture2D(texture, textCoord);\n\t\ttexel *= illuminationDecay * weight;\n\t\tcolor += texel;\n\n\t\tilluminationDecay *= decay;\n\t}\n\n\n\treturn color;\n}\n\n\nvoid main(void) {\n    gl_FragColor = godray();\n}");
+}
+
+var p = ViewGodRay.prototype = new bongiovi.View();
+p.constructor = ViewGodRay;
+
+
+p._init = function() {
+	gl = GL.gl;
+	var positions = [];
+	var coords = [];
+	var indices = []; 
+
+	this.mesh = bongiovi.MeshUtils.createPlane(2, 2, 1);
+};
+
+p.render = function(texture) {
+	this.count += .03;
+	this.shader.bind();
+	this.shader.uniform("texture", "uniform1i", 0);
+	this.shader.uniform("time", "uniform1f", this.count);
+	this.shader.uniform("density", "uniform1f", params.density);
+	this.shader.uniform("weight", "uniform1f", params.weight);
+	this.shader.uniform("decay", "uniform1f", params.decay);
+	texture.bind(0);
+	GL.draw(this.mesh);
+};
+
+module.exports = ViewGodRay;
 },{}],6:[function(require,module,exports){
+// ViewPlane.js
+
+var GL = bongiovi.GL;
+var gl;
+
+
+function ViewPlane() {
+	bongiovi.View.call(this);
+}
+
+var p = ViewPlane.prototype = new bongiovi.View();
+p.constructor = ViewPlane;
+
+
+p._init = function() {
+	gl = GL.gl;
+	var positions = [];
+	var coords = [];
+	var indices = []; 
+
+	var size = 200;
+	this.mesh = bongiovi.MeshUtils.createPlane(size, size*6/5, 1);
+};
+
+p.render = function(texture) {
+	this.shader.bind();
+	this.shader.uniform("texture", "uniform1i", 0);
+	texture.bind(0);
+	GL.draw(this.mesh);
+};
+
+module.exports = ViewPlane;
+},{}],7:[function(require,module,exports){
+// app.js
+window.bongiovi = require("./libs/bongiovi.js");
+var dat = require("dat-gui");
+window.params = {
+	density:.1,
+	weight:.22,
+	decay:.8
+};
+
+(function() {
+	var SceneApp = require("./SceneApp");
+
+	App = function() {
+
+		var l = new bongiovi.SimpleImageLoader();
+		var a = ["assets/forestSpirit.jpg"];
+
+		l.load(a, this, this._onImageLoaded);
+
+		
+	}
+
+	var p = App.prototype;
+
+
+	p._onImageLoaded = function(img) {
+		window.images = img;
+		if(document.body) this._init();
+		else {
+			window.addEventListener("load", this._init.bind(this));
+		}
+	};
+
+	p._init = function() {
+		this.canvas = document.createElement("canvas");
+		this.canvas.width = window.innerWidth;
+		this.canvas.height = window.innerHeight;
+		this.canvas.className = "Main-Canvas";
+		document.body.appendChild(this.canvas);
+		bongiovi.GL.init(this.canvas);
+
+		this._scene = new SceneApp();
+		bongiovi.Scheduler.addEF(this, this._loop);
+
+		this.gui = new dat.GUI({width:300});
+		this.gui.add(params, 'density', 0.0, 1.0);
+		this.gui.add(params, 'weight', 0.0, 1.0);
+		this.gui.add(params, 'decay', 0.0, 1.0);
+	};
+
+	p._loop = function() {
+		this._scene.loop();
+	};
+
+})();
+
+
+new App();
+},{"./SceneApp":4,"./libs/bongiovi.js":8,"dat-gui":1}],8:[function(require,module,exports){
 (function (global){
 (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.bongiovi = f()}})(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(_dereq_,module,exports){
 "use strict";
@@ -19161,4 +19271,4 @@ module.exports = ViewDotPlanes;
 
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}]},{},[1]);
+},{}]},{},[7]);
