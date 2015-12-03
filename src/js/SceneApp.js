@@ -2,6 +2,7 @@
 
 var GL = bongiovi.GL, gl;
 var ViewPlane = require("./ViewPlane");
+var ViewBlur = require("./ViewBlur");
 var ViewGodRay = require("./ViewGodRay");
 
 function SceneApp() {
@@ -18,6 +19,8 @@ p._initTextures = function() {
 	console.log('Init Textures');
 	this._texture = new bongiovi.GLTexture(images.forestSpirit);
 	this._fboRender = new bongiovi.FrameBuffer(GL.width, GL.height);
+	this._fboBlur0 = new bongiovi.FrameBuffer(GL.width, GL.height);
+	this._fboBlur1 = new bongiovi.FrameBuffer(GL.width, GL.height);
 };
 
 p._initViews = function() {
@@ -28,14 +31,17 @@ p._initViews = function() {
 	this._vPlane    = new ViewPlane();
 	this._vCopy     = new bongiovi.ViewCopy();
 	this._vGodRay 	= new ViewGodRay();
+	this._vBlur 	= new ViewBlur();
 };
 
 p.render = function() {
+	gl.enable(gl.DEPTH_TEST);
+	GL.enableAlphaBlending();
 
 	this._fboRender.bind();
 	GL.clear(0, 0, 0, 0);
 	// this._vAxis.render();
-	this._vDotPlane.render();
+	// this._vDotPlane.render();
 	this._vPlane.render(this._texture);
 
 	this._fboRender.unbind();
@@ -43,12 +49,36 @@ p.render = function() {
 
 	GL.setMatrices(this.cameraOrtho);
 	GL.rotate(this.rotationFront);
-	this._vGodRay.render(this._fboRender.getTexture());
+
+
+	this._fboBlur0.bind();
+	GL.clear(0, 0, 0, 0);
+	this._vBlur.render(this._fboRender.getTexture(), true);
+	this._fboBlur0.unbind();
+
+	this._fboBlur1.bind();
+	GL.clear(0, 0, 0, 0);
+	this._vBlur.render(this._fboBlur0.getTexture(), false);
+	this._fboBlur1.unbind();
+
+	var tmp = this._fboBlur1;
+	this._fboBlur1 = this._fboBlur0;
+	this._fboBlur0 = tmp;
+
+
+	gl.disable(gl.DEPTH_TEST);
+	GL.enableAdditiveBlending();
+	this._vCopy.render(this._fboRender.getTexture());
+	this._vGodRay.render(this._fboBlur1.getTexture());
 };
 
 p.resize = function() {
 	GL.setSize(window.innerWidth, window.innerHeight);
 	this.camera.resize(GL.aspectRatio);
+
+	this._fboRender = new bongiovi.FrameBuffer(GL.width, GL.height);
+	this._fboBlur0 = new bongiovi.FrameBuffer(GL.width, GL.height);
+	this._fboBlur1 = new bongiovi.FrameBuffer(GL.width, GL.height);
 };
 
 module.exports = SceneApp;

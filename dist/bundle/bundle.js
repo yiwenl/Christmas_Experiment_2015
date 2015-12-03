@@ -4423,6 +4423,7 @@ dat.utils.common);
 
 var GL = bongiovi.GL, gl;
 var ViewPlane = require("./ViewPlane");
+var ViewBlur = require("./ViewBlur");
 var ViewGodRay = require("./ViewGodRay");
 
 function SceneApp() {
@@ -4439,6 +4440,8 @@ p._initTextures = function() {
 	console.log('Init Textures');
 	this._texture = new bongiovi.GLTexture(images.forestSpirit);
 	this._fboRender = new bongiovi.FrameBuffer(GL.width, GL.height);
+	this._fboBlur0 = new bongiovi.FrameBuffer(GL.width, GL.height);
+	this._fboBlur1 = new bongiovi.FrameBuffer(GL.width, GL.height);
 };
 
 p._initViews = function() {
@@ -4449,14 +4452,17 @@ p._initViews = function() {
 	this._vPlane    = new ViewPlane();
 	this._vCopy     = new bongiovi.ViewCopy();
 	this._vGodRay 	= new ViewGodRay();
+	this._vBlur 	= new ViewBlur();
 };
 
 p.render = function() {
+	gl.enable(gl.DEPTH_TEST);
+	GL.enableAlphaBlending();
 
 	this._fboRender.bind();
 	GL.clear(0, 0, 0, 0);
 	// this._vAxis.render();
-	this._vDotPlane.render();
+	// this._vDotPlane.render();
 	this._vPlane.render(this._texture);
 
 	this._fboRender.unbind();
@@ -4464,16 +4470,76 @@ p.render = function() {
 
 	GL.setMatrices(this.cameraOrtho);
 	GL.rotate(this.rotationFront);
-	this._vGodRay.render(this._fboRender.getTexture());
+
+
+	this._fboBlur0.bind();
+	GL.clear(0, 0, 0, 0);
+	this._vBlur.render(this._fboRender.getTexture(), true);
+	this._fboBlur0.unbind();
+
+	this._fboBlur1.bind();
+	GL.clear(0, 0, 0, 0);
+	this._vBlur.render(this._fboBlur0.getTexture(), false);
+	this._fboBlur1.unbind();
+
+	var tmp = this._fboBlur1;
+	this._fboBlur1 = this._fboBlur0;
+	this._fboBlur0 = tmp;
+
+
+	gl.disable(gl.DEPTH_TEST);
+	GL.enableAdditiveBlending();
+	this._vCopy.render(this._fboRender.getTexture());
+	this._vGodRay.render(this._fboBlur1.getTexture());
 };
 
 p.resize = function() {
 	GL.setSize(window.innerWidth, window.innerHeight);
 	this.camera.resize(GL.aspectRatio);
+
+	this._fboRender = new bongiovi.FrameBuffer(GL.width, GL.height);
+	this._fboBlur0 = new bongiovi.FrameBuffer(GL.width, GL.height);
+	this._fboBlur1 = new bongiovi.FrameBuffer(GL.width, GL.height);
 };
 
 module.exports = SceneApp;
-},{"./ViewGodRay":5,"./ViewPlane":6}],5:[function(require,module,exports){
+},{"./ViewBlur":5,"./ViewGodRay":6,"./ViewPlane":7}],5:[function(require,module,exports){
+// ViewBlur.js
+
+
+var GL = bongiovi.GL;
+var gl;
+
+
+function ViewBlur() {
+	bongiovi.View.call(this, null, "#define GLSLIFY 1\n// blur.frag\n\n#define SHADER_NAME SIMPLE_TEXTURE\n\nprecision highp float;\nvarying vec2 vTextureCoord;\nuniform vec2 resolution;\nuniform vec2 direction;\nuniform sampler2D texture;\n\n\nvec4 blur13(sampler2D image, vec2 uv, vec2 res, vec2 dir) {\n\tvec4 color = vec4(0.0);\n\tvec2 off1 = vec2(1.411764705882353) * dir;\n\tvec2 off2 = vec2(3.2941176470588234) * dir;\n\tvec2 off3 = vec2(5.176470588235294) * dir;\n\tcolor += texture2D(image, uv) * 0.1964825501511404;\n\tcolor += texture2D(image, uv + (off1 / res)) * 0.2969069646728344;\n\tcolor += texture2D(image, uv - (off1 / res)) * 0.2969069646728344;\n\tcolor += texture2D(image, uv + (off2 / res)) * 0.09447039785044732;\n\tcolor += texture2D(image, uv - (off2 / res)) * 0.09447039785044732;\n\tcolor += texture2D(image, uv + (off3 / res)) * 0.010381362401148057;\n\tcolor += texture2D(image, uv - (off3 / res)) * 0.010381362401148057;\n\treturn color;\n}\n\nvoid main(void) {\n\n\tvec4 texel = blur13(texture, vTextureCoord, resolution, direction);\n    gl_FragColor = texel;\n}");
+}
+
+var p = ViewBlur.prototype = new bongiovi.View();
+p.constructor = ViewBlur;
+
+
+p._init = function() {
+	gl = GL.gl;
+	var positions = [];
+	var coords = [];
+	var indices = []; 
+
+	this.mesh = bongiovi.MeshUtils.createPlane(2, 2, 1);
+};
+
+p.render = function(texture, isVertical) {
+	var dir = isVertical ? [0, 1] : [1, 0];
+	this.shader.bind();
+	this.shader.uniform("texture", "uniform1i", 0);
+	this.shader.uniform("resolution", "uniform2fv", [GL.width, GL.height]);
+	this.shader.uniform("direction", "uniform2fv", dir);
+	texture.bind(0);
+	GL.draw(this.mesh);
+};
+
+module.exports = ViewBlur;
+},{}],6:[function(require,module,exports){
 // ViewGodRay.js
 
 var GL = bongiovi.GL;
@@ -4511,7 +4577,7 @@ p.render = function(texture) {
 };
 
 module.exports = ViewGodRay;
-},{}],6:[function(require,module,exports){
+},{}],7:[function(require,module,exports){
 // ViewPlane.js
 
 var GL = bongiovi.GL;
@@ -4544,14 +4610,14 @@ p.render = function(texture) {
 };
 
 module.exports = ViewPlane;
-},{}],7:[function(require,module,exports){
+},{}],8:[function(require,module,exports){
 // app.js
 window.bongiovi = require("./libs/bongiovi.js");
 var dat = require("dat-gui");
 window.params = {
-	density:.1,
-	weight:.22,
-	decay:.8
+	density:.25,
+	weight:.1,
+	decay:.85
 };
 
 (function() {
@@ -4603,7 +4669,7 @@ window.params = {
 
 
 new App();
-},{"./SceneApp":4,"./libs/bongiovi.js":8,"dat-gui":1}],8:[function(require,module,exports){
+},{"./SceneApp":4,"./libs/bongiovi.js":9,"dat-gui":1}],9:[function(require,module,exports){
 (function (global){
 (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.bongiovi = f()}})(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(_dereq_,module,exports){
 "use strict";
@@ -19271,4 +19337,4 @@ module.exports = ViewDotPlanes;
 
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}]},{},[7]);
+},{}]},{},[8]);

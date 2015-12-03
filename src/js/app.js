@@ -2,9 +2,9 @@
 window.bongiovi = require("./libs/bongiovi.js");
 var dat = require("dat-gui");
 window.params = {
-	density:.1,
-	weight:.22,
-	decay:.8
+	density:.25,
+	weight:.1,
+	decay:.85
 };
 
 (function() {
