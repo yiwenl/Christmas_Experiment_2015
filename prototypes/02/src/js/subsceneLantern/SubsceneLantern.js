@@ -29,7 +29,6 @@ function SubsceneLantern(scene) {
 var p = SubsceneLantern.prototype;
 
 p._initTextures = function() {
-	console.log('Init Textures');
 	this._texture = new bongiovi.GLTexture(images.gold);
 	if(!gl) gl = GL.gl;
 
@@ -50,7 +49,6 @@ p._initTextures = function() {
 };
 
 p._initViews = function() {
-	console.log('Init Views');
 	this._vAxis     = new bongiovi.ViewAxis();
 	this._vDotPlane = new bongiovi.ViewDotPlane();
 	this._vSave     = new ViewSave();

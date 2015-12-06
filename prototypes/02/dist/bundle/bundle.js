@@ -4424,10 +4424,10 @@ dat.utils.common);
 var GL = bongiovi.GL, gl;
 
 var SubsceneLantern = require("./subsceneLantern/SubsceneLantern");
+var SubsceneTerrain = require("./subsceneTerrain/SubsceneTerrain");
 
 function SceneApp() {
 	gl = GL.gl;
-	// GL.enableAdditiveBlending();
 	bongiovi.Scene.call(this);
 
 	window.addEventListener("resize", this.resize.bind(this));
@@ -4449,128 +4449,27 @@ var p = SceneApp.prototype = new bongiovi.Scene();
 
 p._initTextures = function() {
 	console.log('Init Textures');
-	// this._texture = new bongiovi.GLTexture(images.gold);
-	// if(!gl) gl = GL.gl;
-
-	// var num = params.numParticles;
-	// var o = {
-	// 	minFilter:gl.NEAREST,
-	// 	magFilter:gl.NEAREST
-	// }
-	// this._fboCurrent 	= new bongiovi.FrameBuffer(num*2, num*2, o);
-	// this._fboTarget 	= new bongiovi.FrameBuffer(num*2, num*2, o);
-
-
-	// // this._fboRender = new bongiovi.FrameBuffer(GL.width, GL.height);
-	// this._fboRender = new bongiovi.FrameBuffer(1024/4, 1024/4);
-	// var sizeBlur = 64;
-	// this._fboBlur0  = new bongiovi.FrameBuffer(sizeBlur, sizeBlur);
-	// this._fboBlur1  = new bongiovi.FrameBuffer(sizeBlur, sizeBlur);
 };
 
 p._initViews = function() {
 	console.log('Init Views');
-	// this._vAxis     = new bongiovi.ViewAxis();
-	// this._vDotPlane = new bongiovi.ViewDotPlane();
-	// this._vSave     = new ViewSave();
-	// this._vCopy 	= new bongiovi.ViewCopy();
-	// this._vRender 	= new ViewRender();
-	// this._vSim 		= new ViewSimulation();
-	// this._vBoxes	= new ViewBoxes();
-	// this._vGodRay 	= new ViewGodRay();
-	// this._vBlur 	= new ViewBlur();
-
-
-	// GL.setMatrices(this.cameraOtho);
-	// GL.rotate(this.rotationFront);
-
-	// this._fboCurrent.bind();
-	// GL.setViewport(0, 0, this._fboCurrent.width, this._fboCurrent.height);
-	// this._vSave.render();
-	// this._fboCurrent.unbind();
 
 	this._subsceneLantern = new SubsceneLantern(this);
+	this._subsceneTerrain = new SubsceneTerrain(this);
 };
-
-
-// p.updateFbo = function() {
-// 	this._fboTarget.bind();
-// 	GL.setViewport(0, 0, this._fboCurrent.width, this._fboCurrent.height);
-// 	GL.clear(0, 0, 0, 0);
-// 	this._vSim.render(this._fboCurrent.getTexture() );
-// 	this._fboTarget.unbind();
-
-
-// 	var tmp = this._fboTarget;
-// 	this._fboTarget = this._fboCurrent;
-// 	this._fboCurrent = tmp;
-// };
-
 
 p.render = function() {
-	// GL.setViewport(0, 0, this._fboRender.width, this._fboRender.height);
-	// this._fboRender.bind();
-	// GL.clear(0, 0, 0, 0);	
-	// this._vBoxes.render(this._fboTarget.getTexture(), this._fboCurrent.getTexture(), this._texture, this.percent);
-	// this._fboRender.unbind();
-
-
-	// GL.setMatrices(this.cameraOtho);
-	// GL.rotate(this.rotationFront);
-
-	// GL.setViewport(0, 0, this._fboBlur0.width, this._fboBlur0.height);
-	// this._fboBlur0.bind();
-	// GL.clear(0, 0, 0, 0);
-	// this._vBlur.render(this._fboRender.getTexture(), true);
-	// this._fboBlur0.unbind();
-
-	// this._fboBlur1.bind();
-	// GL.clear(0, 0, 0, 0);
-	// this._vBlur.render(this._fboBlur0.getTexture(), false);
-	// this._fboBlur1.unbind();
-	// GL.setViewport(0, 0, GL.width, GL.height);
-
-
-	// gl.disable(gl.DEPTH_TEST);
-	// GL.enableAdditiveBlending();
-	// this._vCopy.render(this._fboRender.getTexture());
-	// this._vCopy.render(this._fboBlur1.getTexture());
-	// // this._vGodRay.render(this._fboBlur1.getTexture());
-	// gl.enable(gl.DEPTH_TEST);
-	// GL.enableAlphaBlending();
-
-
-	// if(this.count % params.skipCount == 0) {
-	// 	this.updateFbo();	
-	// 	this.count = 0;
-	// }
-	
-
-	// this.count++;
-	// this.percent = this.count / params.skipCount;
+	GL.clear(0, 0, 0, 0);
+	this._subsceneTerrain.render();
 	this._subsceneLantern.render();
+	
 };
 
-
 p.resize = function() {
-	// var scale = 1.5;
-	// GL.setSize(window.innerWidth*scale, window.innerHeight*scale);
-	// this.camera.resize(GL.aspectRatio);
-
-	// this._fboRender = new bongiovi.FrameBuffer(GL.width, GL.height);
-	// // this._fboRender = new bongiovi.FrameBuffer(1024, 1024);
-
-	// var sizeBlur = 512;
-	// this._fboBlur0 = new bongiovi.FrameBuffer(sizeBlur, sizeBlur);
-	// this._fboBlur1 = new bongiovi.FrameBuffer(sizeBlur, sizeBlur);
 };
 
 module.exports = SceneApp;
-
-
-
-// <iframe width="100%" height="450" scrolling="no" frameborder="no" src="https://w.soundcloud.com/player/?url=https%3A//api.soundcloud.com/tracks/188056255&amp;auto_play=false&amp;hide_related=false&amp;show_comments=true&amp;show_user=true&amp;show_reposts=false&amp;visual=true"></iframe>
-},{"./subsceneLantern/SubsceneLantern":8}],5:[function(require,module,exports){
+},{"./subsceneLantern/SubsceneLantern":8,"./subsceneTerrain/SubsceneTerrain":15}],5:[function(require,module,exports){
 // app.js
 window.bongiovi = require("./libs/bongiovi.js");
 window.Sono     = require("./libs/sono.min.js");
@@ -4582,7 +4481,15 @@ window.params = {
 	gamma:2.2,
 	density:.10,
 	weight:.1,
-	decay:.85
+	decay:.85,
+	noise:.3,
+	terrainNoiseHeight:135.0,
+	detailMapScale:3.4,
+	detailMapHeight:.05,
+	noiseScale:.25,
+	lightPos:[1.0, 1.0, 1.0],
+	lightColor:[255.0, 255.0, 255.0],
+	bump:.3
 };
 
 (function() {
@@ -4591,7 +4498,12 @@ window.params = {
 	App = function() {
 
 		var l = new bongiovi.SimpleImageLoader();
-		var a = ['assets/gold.jpg', 'assets/blue.jpg'];
+		var a = [
+			'assets/gold.jpg', 
+			'assets/blue.jpg',
+			"assets/detailHeight.png",
+			"assets/noise.png",
+			];
 		l.load(a, this, this._onImageLoader);
 	}
 
@@ -17384,7 +17296,6 @@ function SubsceneLantern(scene) {
 var p = SubsceneLantern.prototype;
 
 p._initTextures = function() {
-	console.log('Init Textures');
 	this._texture = new bongiovi.GLTexture(images.gold);
 	if(!gl) gl = GL.gl;
 
@@ -17405,7 +17316,6 @@ p._initTextures = function() {
 };
 
 p._initViews = function() {
-	console.log('Init Views');
 	this._vAxis     = new bongiovi.ViewAxis();
 	this._vDotPlane = new bongiovi.ViewDotPlane();
 	this._vSave     = new ViewSave();
@@ -17953,4 +17863,250 @@ p.render = function(texture) {
 };
 
 module.exports = ViewSimulation;
+},{}],15:[function(require,module,exports){
+// SubsceneTerrain.js
+var GL = bongiovi.GL, gl;
+
+var ViewTerrain = require("./ViewTerrain");
+var ViewNoise = require("./ViewNoise");
+var ViewNormal = require("./ViewNormal");
+
+function SubsceneTerrain(scene) {
+	gl                 = GL.gl;
+	this.scene         = scene;
+	this.camera        = scene.camera;
+	this.cameraOtho    = scene.cameraOtho;
+	this.rotationFront = scene.rotationFront;
+
+	window.addEventListener("resize", this.resize.bind(this));
+
+	this._initTextures();
+	this._initViews();
+	this.resize();
+}
+
+
+var p = SubsceneTerrain.prototype;
+
+
+p._initTextures = function() {
+	this._textureNoise        = new bongiovi.GLTexture(images.noise);
+	this._textureDetailHeight = new bongiovi.GLTexture(images.detailHeight);
+
+	var noiseSize             = 512;
+	this._fboNoise            = new bongiovi.FrameBuffer(noiseSize, noiseSize);
+	this._fboNormal           = new bongiovi.FrameBuffer(noiseSize, noiseSize);
+};
+
+
+p._initViews = function() {
+	this._vCopy 	 = new bongiovi.ViewCopy();
+	this._vTerrain   = new ViewTerrain();
+	this._vNoise     = new ViewNoise(params.noise);
+	this._vNormal    = new ViewNormal(params.terrainNoiseHeight/300*3.0);
+
+
+	GL.setMatrices(this.cameraOtho);
+	GL.rotate(this.rotationFront);
+
+	this._fboNoise.bind();
+	GL.clear();
+	GL.setViewport(0, 0, this._fboNoise.width, this._fboNoise.height);
+	this._vNoise.setNoise(params.noise);
+	this._vNoise.render(this._textureDetailHeight);
+	this._fboNoise.unbind();
+
+	this._fboNormal.bind();
+	GL.clear();
+	this._vNormal.render(this._fboNoise.getTexture());
+	this._fboNormal.unbind();
+};
+
+
+p.render = function() {
+	// GL.setMatrices(this.cameraOtho);
+	// GL.rotate(this.rotationFront);
+
+	// this._vCopy.render(this._fboNoise.getTexture());
+
+	// return;
+	var numTiles = 2;
+	var size = 2000;
+	for(var j=0; j<numTiles; j++) {
+		for(var i=0; i<numTiles; i++) {
+			var uvOffset = [i/numTiles, j/numTiles];
+			this._vTerrain.render(this._fboNoise.getTexture(), numTiles, size, uvOffset, this._fboNormal.getTexture(), this._textureNoise, this.camera);
+		}
+	}
+};
+
+
+p.resize = function(e) {
+	
+};
+
+
+module.exports = SubsceneTerrain;
+},{"./ViewNoise":16,"./ViewNormal":17,"./ViewTerrain":18}],16:[function(require,module,exports){
+// ViewNoise.js
+
+var GL = bongiovi.GL;
+var gl;
+
+
+function ViewNoise(mNoise) {
+	this._noise = mNoise == undefined ? 1.0 : mNoise;
+	bongiovi.View.call(this, null, "#define GLSLIFY 1\n#define SHADER_NAME FRAGMENT_NOISE\n\nprecision highp float;\nvarying vec2 vTextureCoord;\n\nfloat map(float value, float sx, float sy, float tx, float ty) {\n\tfloat p = (value - sx) / ( sy - sx);\n\treturn tx + p * ( ty - tx);\n}\n\n\nfloat hash( vec2 p ) {\n\tfloat h = dot(p,vec2(127.1,311.7)); \n\treturn fract(sin(h)*43758.5453123);\n}\n\nfloat noise( in vec2 p ) {\n\tvec2 i = floor( p );\n\tvec2 f = fract( p );    \n\tvec2 u = f*f*(3.0-2.0*f);\n\treturn -1.0+2.0*mix( mix( hash( i + vec2(0.0,0.0) ), \n\t\t\t\t\t hash( i + vec2(1.0,0.0) ), u.x),\n\t\t\t\tmix( hash( i + vec2(0.0,1.0) ), \n\t\t\t\t\t hash( i + vec2(1.0,1.0) ), u.x), u.y);\n}\n\nconst float RX = 1.6;\nconst float RY = 1.2;\nconst mat2 rotation = mat2(RX,RY,-RY,RX);\nconst int NUM_ITER = 10;\nconst float PI = 3.141592657;\nuniform float time;\nuniform\tfloat noiseOffset;\nuniform\tfloat detailMapScale;\nuniform\tfloat detailMapHeight;\nuniform\tfloat noiseScale;\nuniform sampler2D texture;\n\n\nfloat contrast(float mValue, float mScale, float mMidPoint) {\n\treturn clamp( (mValue - mMidPoint) * mScale + mMidPoint, 0.0, 1.0);\n}\n\nfloat contrast(float mValue, float mScale) {\n\treturn contrast(mValue,  mScale, .5);\n}\n\nvec2 contrast(vec2 mValue, float scale) {\n\treturn vec2(contrast(mValue.x, scale), contrast(mValue.y, scale));\n}\n\n\nmat2 rotate(in float theta) {\n\tfloat c = cos(theta);\n\tfloat s = sin(theta);\n\treturn mat2(c, s, -s, c);\n}\n\nvoid main(void) {   \n\tfloat offset = 5.000;\n\t// vec2 uv = contrast(vTextureCoord,  1.0 + time * 100.0);\n\tvec2 uv = vec2(.5) + rotate(time) * (vTextureCoord - vec2(.5)) + sin(time+cos(time)) * .01;\n\t// uv = contrast(uv, 1.0 );\n\tvec3 detail = texture2D(texture, vTextureCoord * detailMapScale).rgb * detailMapHeight;\n\tfloat grey = 0.0;\n\n\tfloat scale = noiseScale;\n\tfor(int i=0; i<NUM_ITER; i++) {\n\t\tgrey += noise(uv*offset) * scale;\n\t\toffset *= 1.5 * noiseOffset;\n\t\tscale *= 0.6 * noiseOffset;\n\t\tuv *= rotation;\n\t}\n\n\tfloat p = sin(vTextureCoord.x * PI) * sin(vTextureCoord.y * PI);\n\tp = pow(p, 1.5);\n\tgrey = mix(grey, -p, .25);\n\n\n\t// grey = (grey + 1.0) * 0.5;\n\tgl_FragColor = vec4(vec3(grey)+detail*p, 1.0);\n\t// gl_FragColor = vec4(vec3(grey), 1.0);\n}");
+	this._time = Math.random() * 0xFF;
+	gl = GL.gl;
+	// new TangledShader(gl, this.shader.fragmentShader, this._onShaderUpdate.bind(this));
+}
+
+var p = ViewNoise.prototype = new bongiovi.View();
+p.constructor = ViewNoise;
+
+p._onShaderUpdate = function(shader) {
+	this.shader.attachShaderProgram();
+};
+
+p._init = function() {
+	this.mesh = bongiovi.MeshUtils.createPlane(2, 2, 1);
+};
+
+p.setNoise = function(mNoise) {
+	this._noise = mNoise;
+};
+
+p.render = function(texture) {
+	this._time += .001;
+	this.shader.bind();
+	this.shader.uniform("noiseOffset", "uniform1f", this._noise);
+	this.shader.uniform("texture", "uniform1i", 0);
+	this.shader.uniform("time", "uniform1f", this._time);
+	this.shader.uniform("detailMapScale", "uniform1f", params.detailMapScale);
+	this.shader.uniform("detailMapHeight", "uniform1f", params.detailMapHeight);
+	this.shader.uniform("noiseScale", "uniform1f", params.noiseScale);
+
+	texture.bind(0);
+	GL.draw(this.mesh);
+};
+
+module.exports = ViewNoise;
+},{}],17:[function(require,module,exports){
+// ViewNormal.js
+
+var GL = bongiovi.GL;
+var gl;
+
+
+function ViewNormal(mScale) {
+	this._scale = mScale === undefined ? 1.0 : mScale;
+	bongiovi.View.call(this, null, "#define GLSLIFY 1\n#define SHADER_NAME NORMAL_FRAGMENT\n\nprecision highp float;\nvarying vec2 vTextureCoord;\nuniform sampler2D texture;\nuniform float scale;\n\nvec3 getPos(vec2 uv) {\n    vec3 pos = vec3(.0);\n\tpos.y = texture2D(texture, uv).r * scale;\n    pos.xz = uv;\n    \n    return pos;\n}\n\nvoid main(void) {\n    const float gap = .01;\n    vec2 uvRight = vTextureCoord + vec2(gap, .0);\n    vec2 uvBottom = vTextureCoord + vec2(0.0, gap);\n    \n    vec3 posCurr = getPos(vTextureCoord);\n    vec3 posRight = getPos(uvRight);\n    vec3 posBottom = getPos(uvBottom);\n    \n    vec3 vRight = posRight - posCurr;\n    vec3 vBottom = posBottom - posCurr;\n    \n    // vec3 normal = normalize(cross(vRight, vBottom));\n    vec3 normal = normalize(cross(vBottom, vRight));\n    // normal = (normal + 1.0) * .5;\n    // normal.g *= 0.;\n    \n    gl_FragColor = vec4(normal, 1.0);\n}\n");
+}
+
+var p = ViewNormal.prototype = new bongiovi.View();
+p.constructor = ViewNormal;
+
+
+p._init = function() {
+	gl = GL.gl;
+	this.mesh = bongiovi.MeshUtils.createPlane(2, 2, 1);
+};
+
+p.render = function(texture) {
+	this.shader.bind();
+	this.shader.uniform("texture", "uniform1i", 0);
+	this.shader.uniform("scale", "uniform1f", this._scale);
+	texture.bind(0);
+	GL.draw(this.mesh);
+};
+
+module.exports = ViewNormal;
+},{}],18:[function(require,module,exports){
+// ViewTerrain.js
+
+var GL = bongiovi.GL;
+var gl;
+
+
+function ViewTerrain() {
+	bongiovi.View.call(this, "#define GLSLIFY 1\n#define SHADER_NAME BASIC_VERTEX\n\nprecision highp float;\nattribute vec3 aVertexPosition;\nattribute vec2 aTextureCoord;\n\nuniform mat4 uMVMatrix;\nuniform mat4 uPMatrix;\nuniform vec2 uvOffset;\nuniform float numTiles;\nuniform float size;\nuniform float height;\nuniform float near;\nuniform float far;\nuniform vec3 cameraPos;\n\nuniform sampler2D texture;\n\nvarying float vDepth;\nvarying vec2 vTextureCoord;\n\nfloat getDepth(float z, float n, float f) {\n\treturn (2.0 * n) / (f + n - z*(f-n));\n}\n\n\nvec3 getPosition(vec2 uv) {\n\tvec3 pos = vec3(0.0, 0.0, 0.0);\n\tpos.x = -size/2.0 + uv.x * size;\n\tpos.z = size/2.0 - uv.y * size;\n\n\tfloat h = texture2D(texture, uv).r * height;\n\tpos.y += h;\n\n\treturn pos;\n}\n\n\nfloat map(float value, float sx, float sy, float tx, float ty) {\n\tfloat p = (value - sx) / ( sy - sx);\n\tp = clamp(p, 0.0, 1.0);\n\treturn tx + p * ( ty-tx );\n}\n\n\nvoid main(void) {\n\tvec2 uv       = aTextureCoord / numTiles + uvOffset;\n\tvec3 pos      = getPosition(uv);\n\t// pos           = \n\tpos.y \t\t  += aVertexPosition.y;\n\tvec4 V        = uPMatrix * uMVMatrix * vec4(pos, 1.0);\n\tgl_Position   = V;\n\t\n\n\tfloat d       = getDepth(V.z/V.w, near, far);\n\t// float d       = getDepth(distance(cameraPos, /V.w, near, far);\n\t// float d \t  = clamp(distance(pos, cameraPos) / far, 0.0, 1.0);\n\tvDepth        = d;\n\tvTextureCoord = uv;\n}", "#define GLSLIFY 1\n// terrain.frag\n\nprecision highp float;\n\nvarying vec2 vTextureCoord;\nuniform sampler2D textureNormal;\nuniform sampler2D textureNoise;\nuniform vec3 lightColor;\nuniform vec3 lightDir;\nuniform float bumpOffset;\nvarying float vDepth;\n\nconst float ambient_color = .75; \nconst vec3 ambient = vec3(ambient_color);\nconst float lightWeight = 1.0 - ambient_color;\n\nconst vec3 FOG_COLOR = vec3(243.0, 230.0, 214.0)/255.0;\nconst vec3 FLOOR_COLOR = vec3(230.0, 227.0, 222.0)/255.0;\n \n\nvoid main(void) {\n\tgl_FragColor = vec4(FLOOR_COLOR, 1.0);\n\tvec3 N = texture2D(textureNormal, vTextureCoord).rgb;\n\tN += (texture2D(textureNoise, vTextureCoord*5.0).rgb - vec3(.5))* bumpOffset;\n\tN = normalize(N);\n\tfloat lambert = max(0.0, dot(N, normalize(lightDir)));\n\tgl_FragColor.rgb *= ambient + lightColor/255.0 * lambert * lightWeight;\n\tgl_FragColor.rgb = mix(gl_FragColor.rgb, FOG_COLOR, vDepth);\n\t// gl_FragColor.rgb = vec3(vDepth);\n}");
+}
+
+var p = ViewTerrain.prototype = new bongiovi.View();
+p.constructor = ViewTerrain;
+
+
+p._init = function() {
+	gl = GL.gl;
+	var positions = [];
+	var coords = [];
+	var indices = []; 
+	var count = 0;
+	var num = 25;
+	var size = 200, uvGap = 1/num;
+
+	function getPosition(i, j) {
+		var pos = [0, -150, 0]
+		pos[0] = -size/2 + size * i/num;
+		pos[2] = size/2 - size * j/num;
+
+		return pos;
+	}
+
+	for(var j=0; j<num; j++) {
+		for(var i=0; i<num; i++) {
+			positions.push(getPosition(i, j));
+			positions.push(getPosition(i+1, j));
+			positions.push(getPosition(i+1, j+1));
+			positions.push(getPosition(i, j+1));
+
+			coords.push([i/num, j/num]);
+			coords.push([i/num+uvGap, j/num]);
+			coords.push([i/num+uvGap, j/num+uvGap]);
+			coords.push([i/num, j/num+uvGap]);
+
+			indices.push(count*4 + 0);
+			indices.push(count*4 + 1);
+			indices.push(count*4 + 2);
+			indices.push(count*4 + 0);
+			indices.push(count*4 + 2);
+			indices.push(count*4 + 3);
+
+			count ++;
+		}
+	}
+
+
+	this.mesh = new bongiovi.Mesh(positions.length, indices.length, GL.gl.TRIANGLES);
+	this.mesh.bufferVertex(positions);
+	this.mesh.bufferTexCoords(coords);
+	this.mesh.bufferIndices(indices);
+};
+
+p.render = function(texture, numTiles, size, uvOffset, textureNormal, textureNoise, camera) {
+	this.shader.bind();
+
+	this.shader.uniform("size", "uniform1f", size);
+	this.shader.uniform("numTiles", "uniform1f", numTiles);
+	this.shader.uniform("height", "uniform1f", params.terrainNoiseHeight);
+	this.shader.uniform("uvOffset", "uniform2fv", uvOffset);
+	this.shader.uniform("bumpOffset", "uniform1f", params.bump);
+	this.shader.uniform("lightDir", "uniform3fv", params.lightPos);
+	this.shader.uniform("lightColor", "uniform3fv", params.lightColor);
+	this.shader.uniform("cameraPos", "uniform3fv", camera.position);
+	this.shader.uniform("texture", "uniform1i", 0);
+	texture.bind(0);
+	this.shader.uniform("textureNormal", "uniform1i", 1);
+	textureNormal.bind(1);
+	this.shader.uniform("textureNoise", "uniform1i", 2);
+	textureNoise.bind(2);
+	if(camera) {
+		this.shader.uniform("near", "uniform1f", camera.near);
+		this.shader.uniform("far", "uniform1f", camera.far);
+	}
+	GL.draw(this.mesh);
+};
+
+module.exports = ViewTerrain;
 },{}]},{},[5]);

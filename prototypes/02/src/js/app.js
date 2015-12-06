@@ -9,7 +9,15 @@ window.params = {
 	gamma:2.2,
 	density:.10,
 	weight:.1,
-	decay:.85
+	decay:.85,
+	noise:.3,
+	terrainNoiseHeight:135.0,
+	detailMapScale:3.4,
+	detailMapHeight:.05,
+	noiseScale:.25,
+	lightPos:[1.0, 1.0, 1.0],
+	lightColor:[255.0, 255.0, 255.0],
+	bump:.3
 };
 
 (function() {
@@ -18,7 +26,12 @@ window.params = {
 	App = function() {
 
 		var l = new bongiovi.SimpleImageLoader();
-		var a = ['assets/gold.jpg', 'assets/blue.jpg'];
+		var a = [
+			'assets/gold.jpg', 
+			'assets/blue.jpg',
+			"assets/detailHeight.png",
+			"assets/noise.png",
+			];
 		l.load(a, this, this._onImageLoader);
 	}
 
