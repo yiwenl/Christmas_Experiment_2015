@@ -6,7 +6,7 @@ var glslify = require("glslify");
 var random = function(min, max) { return min + Math.random() * (max - min);	};
 
 function ViewSave() {
-	bongiovi.View.call(this, glslify("../shaders/save.vert"), glslify("../shaders/save.frag"));
+	bongiovi.View.call(this, glslify("../../shaders/save.vert"), glslify("../../shaders/save.frag"));
 }
 
 var p = ViewSave.prototype = new bongiovi.View();

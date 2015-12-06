@@ -6,7 +6,7 @@ var random = function(min, max) { return min + Math.random() * (max - min);	}
 
 function ViewRender() {
 	this.time = Math.random() * 0xFF;
-	bongiovi.View.call(this, glslify("../shaders/render.vert"), glslify("../shaders/render.frag"));
+	bongiovi.View.call(this, glslify("../../shaders/render.vert"), glslify("../../shaders/render.frag"));
 }
 
 var p = ViewRender.prototype = new bongiovi.View();

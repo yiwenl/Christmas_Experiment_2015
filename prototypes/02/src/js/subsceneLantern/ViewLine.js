@@ -14,7 +14,7 @@ function ViewLine(count, z, offset) {
 	this.speed      = new bongiovi.EaseNumber(1, .05);
 	this.freq       = new bongiovi.EaseNumber(.01, .05);
 	this.waveHeight = new bongiovi.EaseNumber(50, this.easing);
-	bongiovi.View.call(this, glslify("../shaders/line.vert"), bongiovi.ShaderLibs.get("simpleColorFrag"));
+	bongiovi.View.call(this, glslify("../../shaders/line.vert"), bongiovi.ShaderLibs.get("simpleColorFrag"));
 }
 
 var p = ViewLine.prototype = new bongiovi.View();

@@ -7,7 +7,7 @@ var random = function(min, max) { return min + Math.random() * (max - min);	}
 
 function ViewBoxes() {
 	this.count = 0xFFFF;
-	bongiovi.View.call(this, glslify('../shaders/box.vert'), glslify('../shaders/box.frag'));
+	bongiovi.View.call(this, glslify('../../shaders/box.vert'), glslify('../../shaders/box.frag'));
 }
 
 var p = ViewBoxes.prototype = new bongiovi.View();

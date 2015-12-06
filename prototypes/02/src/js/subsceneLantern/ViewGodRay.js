@@ -6,7 +6,7 @@ var glslify = require("glslify");
 
 function ViewGodRay() {
 	this.count = 0;
-	bongiovi.View.call(this, null, glslify('../shaders/godray.frag'));
+	bongiovi.View.call(this, null, glslify('../../shaders/godray.frag'));
 }
 
 var p = ViewGodRay.prototype = new bongiovi.View();

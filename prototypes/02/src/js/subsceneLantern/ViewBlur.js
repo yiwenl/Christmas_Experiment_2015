@@ -6,7 +6,7 @@ var gl;
 var glslify = require("glslify");
 
 function ViewBlur() {
-	bongiovi.View.call(this, null, glslify('../shaders/blur.frag'));
+	bongiovi.View.call(this, null, glslify('../../shaders/blur.frag'));
 }
 
 var p = ViewBlur.prototype = new bongiovi.View();
