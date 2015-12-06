@@ -4437,7 +4437,7 @@ function SceneApp() {
 
 	window.addEventListener("resize", this.resize.bind(this));
 
-	this.camera.setPerspective(80 * Math.PI/180, GL.aspectRatio, 5, 4000);
+	this.camera.setPerspective(90 * Math.PI/180, GL.aspectRatio, 5, 4000);
 	this.camera.lockRotation(false);
 	this.sceneRotation.lock(true);
 
@@ -4562,7 +4562,7 @@ p.resize = function() {
 	this._fboRender = new bongiovi.FrameBuffer(GL.width, GL.height);
 	// this._fboRender = new bongiovi.FrameBuffer(1024, 1024);
 
-	var sizeBlur = 512 * 2;
+	var sizeBlur = 512;
 	this._fboBlur0 = new bongiovi.FrameBuffer(sizeBlur, sizeBlur);
 	this._fboBlur1 = new bongiovi.FrameBuffer(sizeBlur, sizeBlur);
 };
@@ -4682,7 +4682,7 @@ var random = function(min, max) { return min + Math.random() * (max - min);	}
 
 function ViewBoxes() {
 	this.count = 0xFFFF;
-	bongiovi.View.call(this, "#define GLSLIFY 1\n// box.vert\n\n#define SHADER_NAME BASIC_VERTEX\n\nprecision highp float;\nattribute vec3 aVertexPosition;\nattribute vec2 aTextureCoord;\nattribute vec3 aNormal;\n\nuniform sampler2D texture;\nuniform sampler2D textureNext;\nuniform mat4 uMVMatrix;\nuniform mat4 uPMatrix;\nuniform float percent;\n\nvarying vec2 vTextureCoord;\nvarying vec3 vNormal;\nvarying vec3 vVertex;\nvarying float vOpacity;\n\n\nvec3 getPos(vec3 value) {\n\tvec3 pos;\n\n\tpos.y = value.y;\n\tpos.x = cos(value.z) * value.x;\n\tpos.z = sin(value.z) * value.x;\n\treturn pos;\n}\n\nvec2 rotate(vec2 value, float a) {\n\tfloat c = cos(a);\n\tfloat s = sin(a);\n\tmat2 r = mat2(c, -s, s, c);\n\treturn r * value;\n}\n\n\nconst float PI = 3.141592657;\n\nvoid main(void) {\n\tvOpacity = 1.0;\n\tvec3 pos           = aVertexPosition;\n\tvec2 uvPos         = aTextureCoord * .5;\n\tvec3 posOffset     =  texture2D(texture, uvPos).rgb;\n\tposOffset          = getPos(posOffset);\n\t\n\tvec3 posOffsetNext =  texture2D(textureNext, uvPos).rgb;\n\tposOffsetNext      = getPos(posOffsetNext);\n\tif(posOffsetNext.y < posOffset.y) vOpacity = 0.0;\n\n\n\tposOffset          = mix(posOffset, posOffsetNext, percent);\n\tfloat r            = atan(posOffset.z, posOffset.x);\n\tfloat rotation     = aTextureCoord.x * PI * 2.0 - r;\n\t\n\tpos.xz             = rotate(pos.xz, rotation);\n\tpos.y \t\t\t   += 250.0;\n\t\n\tpos                += posOffset;\n\tgl_Position        = uPMatrix * uMVMatrix * vec4(pos, 1.0);\n\t\n\tvTextureCoord      = aTextureCoord;\n\tvNormal            = aNormal;\n\tvVertex            = aVertexPosition;\n\tvNormal.xz         = rotate(vNormal.xz, rotation);\n}", "#define GLSLIFY 1\n// box.frag\n\n#define SHADER_NAME SIMPLE_TEXTURE\n\nprecision highp float;\nvarying vec2 vTextureCoord;\nvarying vec3 vNormal;\nvarying vec3 vVertex;\nvarying float vOpacity;\n\nuniform float time;\nuniform float gamma;\nuniform sampler2D textureMap;\n// const float gamma = 2.2;\nconst float PI = 3.141592657;\n\nvoid main(void) {\n\tif(vOpacity < .01) discard;\n\tvec3 light = vec3(0.0, -10.0+vTextureCoord.y * 5.0, 0);\n\tfloat g = distance(vVertex, light);\n\tfloat radius = 10.0 + 10.0 * vTextureCoord.x;\n\t// radius *= mix(vTextureCoord.x, 1.0, .5);\n\tg /= radius;\n\tg = smoothstep(0.0, 1.0, 1.0-g);\n\tfloat t = sin(time*mix(vTextureCoord.y, 1.0, .5)) * .5 + .5;\n\tfloat t1 = cos(time*.5*mix(vTextureCoord.x, 1.0, .5)) * .5 + .5;\n\tt *= t1;\n\tt = mix(1.0, t, .8) ;\n\n\tvec2 uv = vTextureCoord;\n\tuv.x = mod(uv.x + time*.25*vTextureCoord.y, 1.0);\n\n\tvec3 color = texture2D(textureMap, uv).rgb;\n\tcolor *= g*t;\n\tcolor += .05;\n\tcolor *= 1.75;\n\tcolor *= color;\n\n\tcolor = pow(color, vec3(1.0 / gamma));\n    gl_FragColor = vec4(color, 1.0);\n}");
+	bongiovi.View.call(this, "#define GLSLIFY 1\n// box.vert\n\n#define SHADER_NAME BASIC_VERTEX\n\nprecision highp float;\nattribute vec3 aVertexPosition;\nattribute vec2 aTextureCoord;\nattribute vec3 aNormal;\n\nuniform sampler2D texture;\nuniform sampler2D textureNext;\nuniform mat4 uMVMatrix;\nuniform mat4 uPMatrix;\nuniform float percent;\nuniform float time;\n\nvarying vec2 vTextureCoord;\nvarying vec3 vNormal;\nvarying vec3 vVertex;\nvarying float vOpacity;\nvarying float vTime;\n\n\nvec3 getPos(vec3 value) {\n\tvec3 pos;\n\n\tpos.y = value.y;\n\tpos.x = cos(value.z) * value.x;\n\tpos.z = sin(value.z) * value.x;\n\treturn pos;\n}\n\nvec2 rotate(vec2 value, float a) {\n\tfloat c = cos(a);\n\tfloat s = sin(a);\n\tmat2 r = mat2(c, -s, s, c);\n\treturn r * value;\n}\n\n\nconst float PI = 3.141592657;\n\nvoid main(void) {\n\tvOpacity = 1.0;\n\tvec3 pos           = aVertexPosition;\n\tvec2 uvPos         = aTextureCoord * .5;\n\tvec3 posOffset     =  texture2D(texture, uvPos).rgb;\n\tposOffset          = getPos(posOffset);\n\t\n\tvec3 posOffsetNext =  texture2D(textureNext, uvPos).rgb;\n\tposOffsetNext      = getPos(posOffsetNext);\n\tif(posOffsetNext.y < posOffset.y) vOpacity = 0.0;\n\n\n\tposOffset          = mix(posOffset, posOffsetNext, percent);\n\tfloat r            = atan(posOffset.z, posOffset.x);\n\tfloat rz \t\t   = sin(time*uvPos.x) * 0.15;\n\tfloat rotation     = aTextureCoord.x * PI * 2.0 - r;\n\t\n\tpos.xz             = rotate(pos.xz, rotation);\n\tpos.xy             = rotate(pos.xy, rz);\n\tpos.y \t\t\t   += 250.0;\n\t\n\tpos                += posOffset;\n\tgl_Position        = uPMatrix * uMVMatrix * vec4(pos, 1.0);\n\t\n\tvTextureCoord      = aTextureCoord;\n\tvNormal            = aNormal;\n\tvVertex            = aVertexPosition;\n\tvNormal.xz         = rotate(vNormal.xz, rotation);\n\tvNormal.xy         = rotate(vNormal.xy, rz);\n\tvTime \t\t\t   = time;\n}", "#define GLSLIFY 1\n// box.frag\n\n#define SHADER_NAME SIMPLE_TEXTURE\n\nprecision highp float;\nvarying vec2 vTextureCoord;\nvarying vec3 vNormal;\nvarying vec3 vVertex;\nvarying float vOpacity;\nvarying float vTime;\n\nuniform float gamma;\nuniform sampler2D textureMap;\n// const float gamma = 2.2;\nconst float PI = 3.141592657;\n\n\nfloat diffuse(vec3 lightPos) {\n\tfloat d = max(dot(vNormal, normalize(lightPos)), 0.0);\n\t// float d = dot(vNormal, normalize(lightPos)) * .5 + .5;\n\treturn d;\n}\n\n\nvec3 diffuse(vec3 lightPos, vec3 lightColor) {\n\treturn diffuse(lightPos) * lightColor;\n}\n\nconst vec3 LIGHT = vec3(1.0, 10.0, 10.0);\n\nvoid main(void) {\n\tif(vOpacity < .01) discard;\n\tvec3 light = vec3(0.0, -10.0+vTextureCoord.y * 5.0, 0);\n\tfloat g = distance(vVertex, light);\n\tfloat radius = 10.0 + 10.0 * vTextureCoord.x;\n\t// radius *= mix(vTextureCoord.x, 1.0, .5);\n\tg /= radius;\n\tg = smoothstep(0.0, 1.0, 1.0-g);\n\tfloat t = sin(vTime*mix(vTextureCoord.y, 1.0, .5)) * .5 + .5;\n\tfloat t1 = cos(vTime*.5*mix(vTextureCoord.x, 1.0, .5)) * .5 + .5;\n\tt *= t1;\n\tt = mix(1.0, t, .8) ;\n\n\tvec2 uv = vTextureCoord;\n\tuv.x = mod(uv.x + vTime*.25*vTextureCoord.y, 1.0);\n\n\tvec3 color = texture2D(textureMap, uv).rgb;\n\tcolor *= g*t;\n\tcolor += .05;\n\tcolor *= 1.75;\n\tcolor *= color;\n\n\tcolor = pow(color, vec3(1.0 / gamma));\n    gl_FragColor = vec4(color, 1.0);\n}");
 }
 
 var p = ViewBoxes.prototype = new bongiovi.View();
@@ -5097,7 +5097,7 @@ var dat         = require("dat-gui");
 
 window.params = {
 	numParticles:64,
-	skipCount:10,
+	skipCount:15,
 	gamma:2.2,
 	density:.10,
 	weight:.1,

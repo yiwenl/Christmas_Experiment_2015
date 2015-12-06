@@ -5,7 +5,7 @@ var dat         = require("dat-gui");
 
 window.params = {
 	numParticles:64,
-	skipCount:10,
+	skipCount:15,
 	gamma:2.2,
 	density:.10,
 	weight:.1,

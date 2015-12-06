@@ -12,11 +12,13 @@ uniform sampler2D textureNext;
 uniform mat4 uMVMatrix;
 uniform mat4 uPMatrix;
 uniform float percent;
+uniform float time;
 
 varying vec2 vTextureCoord;
 varying vec3 vNormal;
 varying vec3 vVertex;
 varying float vOpacity;
+varying float vTime;
 
 
 vec3 getPos(vec3 value) {
@@ -52,9 +54,11 @@ void main(void) {
 
 	posOffset          = mix(posOffset, posOffsetNext, percent);
 	float r            = atan(posOffset.z, posOffset.x);
+	float rz 		   = sin(time*uvPos.x) * 0.15;
 	float rotation     = aTextureCoord.x * PI * 2.0 - r;
 	
 	pos.xz             = rotate(pos.xz, rotation);
+	pos.xy             = rotate(pos.xy, rz);
 	pos.y 			   += 250.0;
 	
 	pos                += posOffset;
@@ -64,4 +68,6 @@ void main(void) {
 	vNormal            = aNormal;
 	vVertex            = aVertexPosition;
 	vNormal.xz         = rotate(vNormal.xz, rotation);
+	vNormal.xy         = rotate(vNormal.xy, rz);
+	vTime 			   = time;
 }

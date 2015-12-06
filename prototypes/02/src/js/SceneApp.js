@@ -16,7 +16,7 @@ function SceneApp() {
 
 	window.addEventListener("resize", this.resize.bind(this));
 
-	this.camera.setPerspective(80 * Math.PI/180, GL.aspectRatio, 5, 4000);
+	this.camera.setPerspective(90 * Math.PI/180, GL.aspectRatio, 5, 4000);
 	this.camera.lockRotation(false);
 	this.sceneRotation.lock(true);
 
@@ -141,7 +141,7 @@ p.resize = function() {
 	this._fboRender = new bongiovi.FrameBuffer(GL.width, GL.height);
 	// this._fboRender = new bongiovi.FrameBuffer(1024, 1024);
 
-	var sizeBlur = 512 * 2;
+	var sizeBlur = 512;
 	this._fboBlur0 = new bongiovi.FrameBuffer(sizeBlur, sizeBlur);
 	this._fboBlur1 = new bongiovi.FrameBuffer(sizeBlur, sizeBlur);
 };
