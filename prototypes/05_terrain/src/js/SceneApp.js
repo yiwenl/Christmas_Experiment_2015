@@ -2,7 +2,6 @@
 
 var GL = bongiovi.GL, gl;
 
-var SubsceneLantern = require("./subsceneLantern/SubsceneLantern");
 var SubsceneTerrain = require("./subsceneTerrain/SubsceneTerrain");
 
 function SceneApp() {
@@ -35,13 +34,10 @@ p._initViews = function() {
 
 	this._vCopy = new bongiovi.ViewCopy();
 
-	this._subsceneLantern = new SubsceneLantern(this);
 	this._subsceneTerrain = new SubsceneTerrain(this);
 };
 
 p._update = function() {
-	this._subsceneLantern.update();
-
 };
 
 
@@ -52,11 +48,6 @@ p.render = function() {
 	GL.rotate(this.sceneRotation.matrix);
 	GL.setViewport(0, 0, GL.width, GL.height);
 	this._subsceneTerrain.render();
-	this._subsceneLantern.render();
-	
-	// GL.setMatrices(this.cameraOtho);
-	// GL.rotate(this.rotationFront);
-	// this._vCopy.render(this._subsceneLantern.getRender());
 };
 
 p.resize = function() {

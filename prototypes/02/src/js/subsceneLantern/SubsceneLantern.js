@@ -71,6 +71,9 @@ p._initViews = function() {
 
 
 p.updateFbo = function() {
+	GL.setMatrices(this.cameraOtho);
+	GL.rotate(this.rotationFront);
+
 	this._fboTarget.bind();
 	GL.setViewport(0, 0, this._fboCurrent.width, this._fboCurrent.height);
 	GL.clear(0, 0, 0, 0);
@@ -83,14 +86,25 @@ p.updateFbo = function() {
 	this._fboCurrent = tmp;
 };
 
+p.update = function() {
+	if(this.count % params.skipCount == 0) {
+		this.updateFbo();	
+		this.count = 0;
+	}
+
+	this.count++;
+	this.percent = this.count / params.skipCount;
+};
+
 
 p.render = function() {
-	GL.setViewport(0, 0, this._fboRender.width, this._fboRender.height);
-	this._fboRender.bind();
-	GL.clear(0, 0, 0, 0);	
+	// GL.setViewport(0, 0, this._fboRender.width, this._fboRender.height);
+	// this._fboRender.bind();
+	// GL.clear(0, 0, 0, 0);	
 	this._vBoxes.render(this._fboTarget.getTexture(), this._fboCurrent.getTexture(), this._texture, this.percent);
-	this._fboRender.unbind();
+	// this._fboRender.unbind();
 
+	return;
 
 	GL.setMatrices(this.cameraOtho);
 	GL.rotate(this.rotationFront);
@@ -115,16 +129,16 @@ p.render = function() {
 	// this._vGodRay.render(this._fboBlur1.getTexture());
 	gl.enable(gl.DEPTH_TEST);
 	GL.enableAlphaBlending();
+};
 
 
-	if(this.count % params.skipCount == 0) {
-		this.updateFbo();	
-		this.count = 0;
-	}
-	
+p.getRender = function() {
+	return this._fboRender.getTexture();
+};
 
-	this.count++;
-	this.percent = this.count / params.skipCount;
+
+p.getBlur = function() {
+	return this._fboBlur1.getTexture();
 };
 
 

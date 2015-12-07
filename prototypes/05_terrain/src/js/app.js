@@ -10,14 +10,22 @@ window.params = {
 	density:.10,
 	weight:.1,
 	decay:.85,
-	noise:.3,
-	terrainNoiseHeight:235.0,
-	detailMapScale:3.4,
-	detailMapHeight:.25,
-	noiseScale:.25,
-	lightPos:[1.0, 1.0, 1.0],
-	lightColor:[255.0, 255.0, 255.0],
-	bump:.3
+
+	terrain: {
+		noise:.3,
+		terrainNoiseHeight:235.0,
+		detailMapScale:3.4,
+		detailMapHeight:.25,
+		noiseScale:.25,
+		lightPos:[1.0, 1.0, 1.0],
+		lightColor:[255.0, 255.0, 255.0],
+		bump:.3,
+		shininess:.55,
+		roughness:1.0,
+		albedo:.5,
+		ambient:.6
+	}
+	
 };
 
 (function() {
@@ -57,10 +65,17 @@ window.params = {
 		bongiovi.Scheduler.addEF(this, this._loop);
 
 		this.gui = new dat.GUI({width:300});
-		this.gui.add(params,'gamma', 1, 5);
-		this.gui.add(params, 'density', 0.0, 1.0);
-		this.gui.add(params, 'weight', 0.0, 1.0);
-		this.gui.add(params, 'decay', 0.0, 1.0);
+		// this.gui.add(params,'gamma', 1, 5);
+		// this.gui.add(params, 'density', 0.0, 1.0);
+		// this.gui.add(params, 'weight', 0.0, 1.0);
+		// this.gui.add(params, 'decay', 0.0, 1.0);
+
+		var fTerrain = this.gui.addFolder('terrain');
+		fTerrain.open();
+		fTerrain.add(params.terrain, 'roughness', 0.0, 1.0);
+		fTerrain.add(params.terrain, 'albedo', 0.0, 1.0);
+		fTerrain.add(params.terrain, 'ambient', 0.0, 1.0);
+		fTerrain.add(params.terrain, 'shininess', 0.0, 1.0);
 	};
 
 	p._loop = function() {
