@@ -12,8 +12,6 @@ uniform float size;
 uniform float height;
 uniform float near;
 uniform float far;
-uniform vec3 cameraPos;
-
 uniform sampler2D texture;
 
 varying float vDepth;

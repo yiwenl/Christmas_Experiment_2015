@@ -11,6 +11,8 @@ uniform float albedo;
 uniform float roughness;
 uniform float ambient;
 uniform float shininess;
+uniform mat3 normalMatrix;
+uniform vec3 cameraPos;
 
 varying vec2 vTextureCoord;
 varying float vDepth;
@@ -42,7 +44,6 @@ float orenNayarDiffuse(vec3 lightDirection,	vec3 viewDirection,	vec3 surfaceNorm
 }
 
 
-
 float gaussianSpecular(vec3 lightDirection, vec3 viewDirection, vec3 surfaceNormal, float shininess) {
 
 	vec3 H = normalize(lightDirection + viewDirection);
@@ -51,7 +52,7 @@ float gaussianSpecular(vec3 lightDirection, vec3 viewDirection, vec3 surfaceNorm
 	return exp(-w*w);
 
 }
- 
+
 
 void main(void) {
 	gl_FragColor = vec4(FLOOR_COLOR, 1.0);
@@ -63,6 +64,7 @@ void main(void) {
 
 	//	GET LIGHT
 	vec3 L = normalize(lightDir);
+
 
 	//	DIFFUSE
 	float diffuse = orenNayarDiffuse(L, vEye, N, roughness, albedo);

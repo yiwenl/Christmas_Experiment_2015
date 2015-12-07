@@ -4423,6 +4423,10 @@ dat.utils.common);
 
 var GL = bongiovi.GL, gl;
 
+var ViewSphere = require("./ViewSphere");
+var ViewBlur = require("./ViewBlur");
+var ViewBloom = require("./ViewBloom");
+var ViewFXAA = require("./ViewFXAA");
 var SubsceneTerrain = require("./subsceneTerrain/SubsceneTerrain");
 
 function SceneApp() {
@@ -4448,13 +4452,23 @@ var p = SceneApp.prototype = new bongiovi.Scene();
 
 p._initTextures = function() {
 	console.log('Init Textures');
+
+	var renderSize = 1024;
+	this._fboRender = new bongiovi.FrameBuffer(renderSize, renderSize);
+
+	var blurSize = 512;
+	this._fboBlur0 = new bongiovi.FrameBuffer(blurSize, blurSize);
+	this._fboBlur1 = new bongiovi.FrameBuffer(blurSize, blurSize);
 };
 
 p._initViews = function() {
 	console.log('Init Views');
 
 	this._vCopy = new bongiovi.ViewCopy();
-
+	this._vSphere = new ViewSphere();
+	this._vBlur = new ViewBlur();
+	this._vBloom = new ViewBloom();
+	this._vFxaa = new ViewFXAA();
 	this._subsceneTerrain = new SubsceneTerrain(this);
 };
 
@@ -4464,20 +4478,181 @@ p._update = function() {
 
 p.render = function() {
 	this._update();
-	GL.clear(0, 0, 0, 0);
+	
 	GL.setMatrices(this.camera);
 	GL.rotate(this.sceneRotation.matrix);
-	GL.setViewport(0, 0, GL.width, GL.height);
+	GL.setViewport(0, 0, this._fboRender.width, this._fboRender.height);
+
+	this._fboRender.bind();
+	GL.clear(0, 0, 0, 0);
+	this._vSphere.render(params.terrain.lightPos);
 	this._subsceneTerrain.render();
+	this._fboRender.unbind();
+
+	
+	GL.setMatrices(this.cameraOrtho);
+	GL.rotate(this.rotationFront);
+
+	GL.setViewport(0, 0, this._fboBlur0.width, this._fboBlur0.height);
+	this._fboBlur0.bind();
+	GL.clear(0, 0, 0, 0);
+	this._vBlur.render(this._fboRender.getTexture(), true);
+	this._fboBlur0.unbind();
+
+	this._fboBlur1.bind();
+	GL.clear(0, 0, 0, 0);
+	this._vBlur.render(this._fboBlur0.getTexture(), false);
+	this._fboBlur1.unbind();
+
+	GL.setViewport(0, 0, GL.width, GL.height);
+	if(params.post.enablePostEffect) {
+		// this._vBloom.render(this._fboRender.getTexture(), this._fboBlur1.getTexture(), params.post.bloomThreshold);
+		this._vFxaa.render(this._fboRender.getTexture(), this._fboBlur1.getTexture(), params.post.bloomThreshold);
+	} else {
+		this._vCopy.render(this._fboRender.getTexture());	
+	}
+	
+	
 };
 
 p.resize = function() {
 };
 
 module.exports = SceneApp;
-},{"./subsceneTerrain/SubsceneTerrain":8}],5:[function(require,module,exports){
+},{"./ViewBloom":5,"./ViewBlur":6,"./ViewFXAA":7,"./ViewSphere":8,"./subsceneTerrain/SubsceneTerrain":12}],5:[function(require,module,exports){
+// ViewBloom.js
+
+var GL = bongiovi.GL;
+var gl;
+
+
+function ViewBloom() {
+	bongiovi.View.call(this, null, "#define GLSLIFY 1\n// bloom.frag\n#define SHADER_NAME SIMPLE_TEXTURE\n\nprecision highp float;\nvarying vec2 vTextureCoord;\nuniform sampler2D texture;\nuniform sampler2D textureBlur;\nuniform float threshold;\n\nvoid main(void) {\n\tvec4 color       = texture2D(texture, vTextureCoord);\n\tvec4 colorBlur   = texture2D(textureBlur, vTextureCoord);\n\t\n\tfloat brightness = length(color.rgb) / length(vec3(1.0));\n\tfloat offset     = smoothstep(threshold, 1.0, brightness);\n\tgl_FragColor     = color;\n\tgl_FragColor.rgb += colorBlur.rgb * offset;\n}");
+}
+
+var p = ViewBloom.prototype = new bongiovi.View();
+p.constructor = ViewBloom;
+
+
+p._init = function() {
+	gl = GL.gl;
+	this.mesh = bongiovi.MeshUtils.createPlane(2, 2, 1);
+};
+
+p.render = function(texture, textureBlur, threshold) {
+	threshold === undefined ? .5 : threshold;
+	this.shader.bind();
+	this.shader.uniform("texture", "uniform1i", 0);
+	texture.bind(0);
+	this.shader.uniform("textureBlur", "uniform1i", 1);
+	textureBlur.bind(1);
+	this.shader.uniform("threshold", "uniform1f", threshold);
+	GL.draw(this.mesh);
+};
+
+module.exports = ViewBloom;
+},{}],6:[function(require,module,exports){
+// ViewBlur.js
+
+
+var GL = bongiovi.GL;
+var gl;
+
+
+function ViewBlur() {
+	bongiovi.View.call(this, null, "#define GLSLIFY 1\n// blur.frag\n\n#define SHADER_NAME SIMPLE_TEXTURE\n\nprecision highp float;\nvarying vec2 vTextureCoord;\nuniform vec2 resolution;\nuniform vec2 direction;\nuniform sampler2D texture;\n\n\n\nvec4 blur13(sampler2D image, vec2 uv, vec2 res, vec2 dir) {\n\tvec4 color = vec4(0.0);\n\tvec2 off1 = vec2(1.411764705882353) * dir;\n\tvec2 off2 = vec2(3.2941176470588234) * dir;\n\tvec2 off3 = vec2(5.176470588235294) * dir;\n\tcolor += texture2D(image, uv) * 0.1964825501511404;\n\tcolor += texture2D(image, uv + (off1 / res)) * 0.2969069646728344;\n\tcolor += texture2D(image, uv - (off1 / res)) * 0.2969069646728344;\n\tcolor += texture2D(image, uv + (off2 / res)) * 0.09447039785044732;\n\tcolor += texture2D(image, uv - (off2 / res)) * 0.09447039785044732;\n\tcolor += texture2D(image, uv + (off3 / res)) * 0.010381362401148057;\n\tcolor += texture2D(image, uv - (off3 / res)) * 0.010381362401148057;\n\treturn color;\n}\n\nvec4 blur9(sampler2D image, vec2 uv, vec2 resolution, vec2 direction) {\n  vec4 color = vec4(0.0);\n  vec2 off1 = vec2(1.3846153846) * direction;\n  vec2 off2 = vec2(3.2307692308) * direction;\n  color += texture2D(image, uv) * 0.2270270270;\n  color += texture2D(image, uv + (off1 / resolution)) * 0.3162162162;\n  color += texture2D(image, uv - (off1 / resolution)) * 0.3162162162;\n  color += texture2D(image, uv + (off2 / resolution)) * 0.0702702703;\n  color += texture2D(image, uv - (off2 / resolution)) * 0.0702702703;\n  return color;\n}\n\nvoid main(void) {\n\n\tvec4 texel = blur9(texture, vTextureCoord, resolution, direction);\n    gl_FragColor = texel;\n}");
+}
+
+var p = ViewBlur.prototype = new bongiovi.View();
+p.constructor = ViewBlur;
+
+
+p._init = function() {
+	gl = GL.gl;
+	var positions = [];
+	var coords = [];
+	var indices = []; 
+
+	this.mesh = bongiovi.MeshUtils.createPlane(2, 2, 1);
+};
+
+p.render = function(texture, isVertical) {
+	var dir = isVertical ? [0, 1] : [1, 0];
+	this.shader.bind();
+	this.shader.uniform("texture", "uniform1i", 0);
+	this.shader.uniform("resolution", "uniform2fv", [GL.width, GL.height]);
+	this.shader.uniform("direction", "uniform2fv", dir);
+	texture.bind(0);
+	GL.draw(this.mesh);
+};
+
+module.exports = ViewBlur;
+},{}],7:[function(require,module,exports){
+// ViewFXAA.js
+
+var GL = bongiovi.GL;
+var gl;
+
+
+function ViewFXAA() {
+	bongiovi.View.call(this, "#define GLSLIFY 1\n// fxaa.vert\n\n#define SHADER_NAME BASIC_VERTEX\n\nprecision highp float;\nattribute vec3 aVertexPosition;\nattribute vec2 aTextureCoord;\n\nuniform mat4 uMVMatrix;\nuniform mat4 uPMatrix;\nuniform vec2 resolution;\n\nvarying vec2 vTextureCoord;\nvarying vec2 v_rgbNW;\nvarying vec2 v_rgbNE;\nvarying vec2 v_rgbSW;\nvarying vec2 v_rgbSE;\nvarying vec2 v_rgbM;\nvarying vec2 vResolution;\n\nvoid texcoords(vec2 fragCoord, vec2 resolution,\n\t\t\tout vec2 v_rgbNW, out vec2 v_rgbNE,\n\t\t\tout vec2 v_rgbSW, out vec2 v_rgbSE,\n\t\t\tout vec2 v_rgbM) {\n\tvec2 inverseVP = 1.0 / resolution.xy;\n\tv_rgbNW = (fragCoord + vec2(-1.0, -1.0)) * inverseVP;\n\tv_rgbNE = (fragCoord + vec2(1.0, -1.0)) * inverseVP;\n\tv_rgbSW = (fragCoord + vec2(-1.0, 1.0)) * inverseVP;\n\tv_rgbSE = (fragCoord + vec2(1.0, 1.0)) * inverseVP;\n\tv_rgbM = vec2(fragCoord * inverseVP);\n}\n\nvoid main(void) {\n    gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);\n    vTextureCoord = aTextureCoord;\n\n    vec2 fragCoord = aTextureCoord * resolution;\n\ttexcoords(vTextureCoord, resolution, v_rgbNW, v_rgbNE, v_rgbSW, v_rgbSE, v_rgbM);\n\n\tvResolution = resolution;\n}", "#define GLSLIFY 1\n// fxaa.frag\n\n#define SHADER_NAME SIMPLE_TEXTURE\n\nprecision highp float;\n\nvarying vec2 vTextureCoord;\nvarying vec2 v_rgbNW;\nvarying vec2 v_rgbNE;\nvarying vec2 v_rgbSW;\nvarying vec2 v_rgbSE;\nvarying vec2 v_rgbM;\n\nuniform sampler2D texture;\nvarying vec2 vResolution;\n\n\n#ifndef FXAA_REDUCE_MIN\n    #define FXAA_REDUCE_MIN   (1.0/ 128.0)\n#endif\n#ifndef FXAA_REDUCE_MUL\n    #define FXAA_REDUCE_MUL   (1.0 / 8.0)\n#endif\n#ifndef FXAA_SPAN_MAX\n    #define FXAA_SPAN_MAX     8.0\n#endif\n\n//optimized version for mobile, where dependent \n//texture reads can be a bottleneck\nvec4 fxaa(sampler2D tex, vec2 fragCoord, vec2 resolution,\n            vec2 v_rgbNW, vec2 v_rgbNE, \n            vec2 v_rgbSW, vec2 v_rgbSE, \n            vec2 v_rgbM) {\n    vec4 color;\n    mediump vec2 inverseVP = vec2(1.0 / resolution.x, 1.0 / resolution.y);\n    vec3 rgbNW = texture2D(tex, v_rgbNW).xyz;\n    vec3 rgbNE = texture2D(tex, v_rgbNE).xyz;\n    vec3 rgbSW = texture2D(tex, v_rgbSW).xyz;\n    vec3 rgbSE = texture2D(tex, v_rgbSE).xyz;\n    vec4 texColor = texture2D(tex, v_rgbM);\n    vec3 rgbM  = texColor.xyz;\n    vec3 luma = vec3(0.299, 0.587, 0.114);\n    float lumaNW = dot(rgbNW, luma);\n    float lumaNE = dot(rgbNE, luma);\n    float lumaSW = dot(rgbSW, luma);\n    float lumaSE = dot(rgbSE, luma);\n    float lumaM  = dot(rgbM,  luma);\n    float lumaMin = min(lumaM, min(min(lumaNW, lumaNE), min(lumaSW, lumaSE)));\n    float lumaMax = max(lumaM, max(max(lumaNW, lumaNE), max(lumaSW, lumaSE)));\n    \n    mediump vec2 dir;\n    dir.x = -((lumaNW + lumaNE) - (lumaSW + lumaSE));\n    dir.y =  ((lumaNW + lumaSW) - (lumaNE + lumaSE));\n    \n    float dirReduce = max((lumaNW + lumaNE + lumaSW + lumaSE) *\n                          (0.25 * FXAA_REDUCE_MUL), FXAA_REDUCE_MIN);\n    \n    float rcpDirMin = 1.0 / (min(abs(dir.x), abs(dir.y)) + dirReduce);\n    dir = min(vec2(FXAA_SPAN_MAX, FXAA_SPAN_MAX),\n              max(vec2(-FXAA_SPAN_MAX, -FXAA_SPAN_MAX),\n              dir * rcpDirMin)) * inverseVP;\n    \n    vec3 rgbA = 0.5 * (\n        texture2D(tex, fragCoord * inverseVP + dir * (1.0 / 3.0 - 0.5)).xyz +\n        texture2D(tex, fragCoord * inverseVP + dir * (2.0 / 3.0 - 0.5)).xyz);\n    vec3 rgbB = rgbA * 0.5 + 0.25 * (\n        texture2D(tex, fragCoord * inverseVP + dir * -0.5).xyz +\n        texture2D(tex, fragCoord * inverseVP + dir * 0.5).xyz);\n\n    float lumaB = dot(rgbB, luma);\n    if ((lumaB < lumaMin) || (lumaB > lumaMax))\n        color = vec4(rgbA, texColor.a);\n    else\n        color = vec4(rgbB, texColor.a);\n    return color;\n}\n\nvoid texcoords(vec2 fragCoord, vec2 resolution,\n\t\t\tout vec2 v_rgbNW, out vec2 v_rgbNE,\n\t\t\tout vec2 v_rgbSW, out vec2 v_rgbSE,\n\t\t\tout vec2 v_rgbM) {\n\tvec2 inverseVP = 1.0 / resolution.xy;\n\tv_rgbNW = (fragCoord + vec2(-1.0, -1.0)) * inverseVP;\n\tv_rgbNE = (fragCoord + vec2(1.0, -1.0)) * inverseVP;\n\tv_rgbSW = (fragCoord + vec2(-1.0, 1.0)) * inverseVP;\n\tv_rgbSE = (fragCoord + vec2(1.0, 1.0)) * inverseVP;\n\tv_rgbM = vec2(fragCoord * inverseVP);\n}\n\nvec4 apply(sampler2D tex, vec2 fragCoord, vec2 resolution) {\n\tmediump vec2 v_rgbNW;\n\tmediump vec2 v_rgbNE;\n\tmediump vec2 v_rgbSW;\n\tmediump vec2 v_rgbSE;\n\tmediump vec2 v_rgbM;\n\n\t//compute the texture coords\n\ttexcoords(fragCoord, resolution, v_rgbNW, v_rgbNE, v_rgbSW, v_rgbSE, v_rgbM);\n\t\n\t//compute FXAA\n\treturn fxaa(tex, fragCoord, resolution, v_rgbNW, v_rgbNE, v_rgbSW, v_rgbSE, v_rgbM);\n}\n\n\n\nvoid main(void) {\n    // gl_FragColor = texture2D(texture, vTextureCoord);\n    vec2 fragCoord = vTextureCoord * vResolution; \n\n    gl_FragColor = fxaa(texture, fragCoord, vResolution, v_rgbNW, v_rgbNE, v_rgbSW, v_rgbSE, v_rgbM);\n}");
+}
+
+var p = ViewFXAA.prototype = new bongiovi.View();
+p.constructor = ViewFXAA;
+
+
+p._init = function() {
+	gl = GL.gl;
+	this.mesh = bongiovi.MeshUtils.createPlane(2, 2, 1);
+};
+
+p.render = function(texture) {
+	this.shader.bind();
+	this.shader.uniform("texture", "uniform1i", 0);
+	this.shader.uniform("resolution", "uniform2fv", [GL.width, GL.height]);
+	texture.bind(0);
+	GL.draw(this.mesh);
+};
+
+module.exports = ViewFXAA;
+},{}],8:[function(require,module,exports){
+// ViewSphere.js
+
+var GL = bongiovi.GL;
+var gl;
+
+
+function ViewSphere() {
+	bongiovi.View.call(this, bongiovi.ShaderLibs.get('generalVert'), bongiovi.ShaderLibs.get('simpleColorFrag'));
+}
+
+var p = ViewSphere.prototype = new bongiovi.View();
+p.constructor = ViewSphere;
+
+
+p._init = function() {
+	gl = GL.gl;
+	var positions = [];
+	var coords = [];
+	var indices = []; 
+
+	this.mesh = bongiovi.MeshUtils.createSphere(20, 20);
+};
+
+p.render = function(pos) {
+	this.shader.bind();
+	this.shader.uniform("position", "uniform3fv", pos || [0, 0, 0]);
+	this.shader.uniform("scale", "uniform3fv", [1, 1, 1]);
+	this.shader.uniform("color", "uniform3fv", [1, 1, 1]);
+	this.shader.uniform("opacity", "uniform1f", 1);
+	GL.draw(this.mesh);
+};
+
+module.exports = ViewSphere;
+},{}],9:[function(require,module,exports){
 // app.js
-window.bongiovi = require("./libs/bongiovi.js");
+window.bongiovi = require("./libs/bongiovi-post.js");
 window.Sono     = require("./libs/sono.min.js");
 var dat         = require("dat-gui");
 
@@ -4495,14 +4670,23 @@ window.params = {
 		detailMapScale:3.4,
 		detailMapHeight:.25,
 		noiseScale:.25,
-		lightPos:[1.0, 1.0, 1.0],
+		lightPos:[500.0, 500.0, 500.0],
 		lightColor:[255.0, 255.0, 255.0],
 		bump:.3,
 		shininess:.55,
 		roughness:1.0,
 		albedo:.5,
 		ambient:.6
+	},
+
+
+	post : {
+		enablePostEffect:true,
+		bloomThreshold:.75
 	}
+
+
+
 	
 };
 
@@ -4554,6 +4738,11 @@ window.params = {
 		fTerrain.add(params.terrain, 'albedo', 0.0, 1.0);
 		fTerrain.add(params.terrain, 'ambient', 0.0, 1.0);
 		fTerrain.add(params.terrain, 'shininess', 0.0, 1.0);
+
+		var fPost = this.gui.addFolder('post effect');
+		fPost.open();
+		fPost.add(params.post, 'enablePostEffect');
+		fPost.add(params.post, 'bloomThreshold', 0.0, 1.0);
 	};
 
 	p._loop = function() {
@@ -4564,40 +4753,60 @@ window.params = {
 
 
 new App();
-},{"./SceneApp":4,"./libs/bongiovi.js":6,"./libs/sono.min.js":7,"dat-gui":1}],6:[function(require,module,exports){
+},{"./SceneApp":4,"./libs/bongiovi-post.js":10,"./libs/sono.min.js":11,"dat-gui":1}],10:[function(require,module,exports){
 (function (global){
-(function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.bongiovi = f()}})(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(_dereq_,module,exports){
+(function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.bongioviPost = f()}})(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(_dereq_,module,exports){
+// bongiovi-post.js
+
 "use strict";
 
-var GLTools = _dereq_("./bongiovi/GLTools");
 
+var bongiovi = _dereq_("./bongiovi");
+
+/*/
+var GLTools = require("./bongiovi/GLTools");
 var bongiovi = {
 	GL:GLTools,
 	GLTools:GLTools,
-	Scheduler:_dereq_("./bongiovi/Scheduler"),
-	SimpleImageLoader:_dereq_("./bongiovi/SimpleImageLoader"),
-	EaseNumber:_dereq_("./bongiovi/EaseNumber"),
-	QuatRotation:_dereq_("./bongiovi/QuatRotation"),
-	Scene:_dereq_("./bongiovi/Scene"),
-	Camera:_dereq_("./bongiovi/Camera"),
-	SimpleCamera:_dereq_("./bongiovi/SimpleCamera"),
-	CameraPerspective:_dereq_("./bongiovi/CameraPerspective"),
-	Mesh:_dereq_("./bongiovi/Mesh"),
-	Face:_dereq_("./bongiovi/Face"),
-	GLShader:_dereq_("./bongiovi/GLShader"),
-	GLTexture:_dereq_("./bongiovi/GLTexture"),
-	ShaderLibs:_dereq_("./bongiovi/ShaderLibs"),
-	View:_dereq_("./bongiovi/View"),
-	ViewCopy:_dereq_("./bongiovi/ViewCopy"),
-	ViewAxis:_dereq_("./bongiovi/ViewAxis"),
-	ViewDotPlane:_dereq_("./bongiovi/ViewDotPlanes"),
-	MeshUtils:_dereq_("./bongiovi/MeshUtils"),
-	FrameBuffer:_dereq_("./bongiovi/FrameBuffer"),
-	glm:_dereq_("gl-matrix")
+	Scheduler:require("./bongiovi/Scheduler"),
+	SimpleImageLoader:require("./bongiovi/SimpleImageLoader"),
+	EaseNumber:require("./bongiovi/EaseNumber"),
+	QuatRotation:require("./bongiovi/QuatRotation"),
+	Scene:require("./bongiovi/Scene"),
+	Camera:require("./bongiovi/Camera"),
+	SimpleCamera:require("./bongiovi/SimpleCamera"),
+	CameraPerspective:require("./bongiovi/CameraPerspective"),
+	CameraOrtho:require("./bongiovi/CameraOrtho"),
+	Mesh:require("./bongiovi/Mesh"),
+	Face:require("./bongiovi/Face"),
+	GLShader:require("./bongiovi/GLShader"),
+	GLTexture:require("./bongiovi/GLTexture"),
+	ShaderLibs:require("./bongiovi/ShaderLibs"),
+	View:require("./bongiovi/View"),
+	ViewCopy:require("./bongiovi/ViewCopy"),
+	ViewAxis:require("./bongiovi/ViewAxis"),
+	ViewDotPlane:require("./bongiovi/ViewDotPlanes"),
+	MeshUtils:require("./bongiovi/MeshUtils"),
+	FrameBuffer:require("./bongiovi/FrameBuffer"),
+	EventDispatcher:require("./bongiovi/EventDispatcher"),
+	glm:require("gl-matrix"),
+
+	post: {
+		Pass:require("./bongiovi/post/Pass"),
+		EffectComposer:require("./bongiovi/post/EffectComposer"),
+		PassGreyscale:require("./bongiovi/post/PassGreyscale")
+	}
 };
+/*/
+bongiovi.post = {
+	Pass:_dereq_("./bongiovi/post/Pass"),
+	EffectComposer:_dereq_("./bongiovi/post/EffectComposer"),
+	PassGreyscale:_dereq_("./bongiovi/post/PassGreyscale")
+};
+//*/
 
 module.exports = bongiovi;
-},{"./bongiovi/Camera":3,"./bongiovi/CameraPerspective":4,"./bongiovi/EaseNumber":5,"./bongiovi/Face":6,"./bongiovi/FrameBuffer":7,"./bongiovi/GLShader":8,"./bongiovi/GLTexture":9,"./bongiovi/GLTools":10,"./bongiovi/Mesh":11,"./bongiovi/MeshUtils":12,"./bongiovi/QuatRotation":13,"./bongiovi/Scene":14,"./bongiovi/Scheduler":15,"./bongiovi/ShaderLibs":16,"./bongiovi/SimpleCamera":17,"./bongiovi/SimpleImageLoader":18,"./bongiovi/View":19,"./bongiovi/ViewAxis":20,"./bongiovi/ViewCopy":21,"./bongiovi/ViewDotPlanes":22,"gl-matrix":2}],2:[function(_dereq_,module,exports){
+},{"./bongiovi":3,"./bongiovi/post/EffectComposer":28,"./bongiovi/post/Pass":29,"./bongiovi/post/PassGreyscale":30}],2:[function(_dereq_,module,exports){
 /**
  * @fileoverview gl-matrix - High performance matrix and vector operations
  * @author Brandon Jones
@@ -6499,38 +6708,58 @@ mat2.invert = function(out, a) {
         det = a0 * a3 - a2 * a1;
 
     if (!det) {
-        return (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.bongiovi = f()}})(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof _dereq_=="function"&&_dereq_;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof _dereq_=="function"&&_dereq_;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(_dereq_,module,exports){
+        return (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.bongioviPost = f()}})(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof _dereq_=="function"&&_dereq_;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof _dereq_=="function"&&_dereq_;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(_dereq_,module,exports){
+// bongiovi-post.js
+
 "use strict";
 
-var GLTools = _dereq_("./bongiovi/GLTools");
 
+var bongiovi = _dereq_("./bongiovi");
+
+/*/
+var GLTools = require("./bongiovi/GLTools");
 var bongiovi = {
 	GL:GLTools,
 	GLTools:GLTools,
-	Scheduler:_dereq_("./bongiovi/Scheduler"),
-	SimpleImageLoader:_dereq_("./bongiovi/SimpleImageLoader"),
-	EaseNumber:_dereq_("./bongiovi/EaseNumber"),
-	QuatRotation:_dereq_("./bongiovi/QuatRotation"),
-	Scene:_dereq_("./bongiovi/Scene"),
-	Camera:_dereq_("./bongiovi/Camera"),
-	SimpleCamera:_dereq_("./bongiovi/SimpleCamera"),
-	CameraPerspective:_dereq_("./bongiovi/CameraPerspective"),
-	Mesh:_dereq_("./bongiovi/Mesh"),
-	Face:_dereq_("./bongiovi/Face"),
-	GLShader:_dereq_("./bongiovi/GLShader"),
-	GLTexture:_dereq_("./bongiovi/GLTexture"),
-	ShaderLibs:_dereq_("./bongiovi/ShaderLibs"),
-	View:_dereq_("./bongiovi/View"),
-	ViewCopy:_dereq_("./bongiovi/ViewCopy"),
-	ViewAxis:_dereq_("./bongiovi/ViewAxis"),
-	ViewDotPlane:_dereq_("./bongiovi/ViewDotPlanes"),
-	MeshUtils:_dereq_("./bongiovi/MeshUtils"),
-	FrameBuffer:_dereq_("./bongiovi/FrameBuffer"),
-	glm:_dereq_("gl-matrix")
+	Scheduler:require("./bongiovi/Scheduler"),
+	SimpleImageLoader:require("./bongiovi/SimpleImageLoader"),
+	EaseNumber:require("./bongiovi/EaseNumber"),
+	QuatRotation:require("./bongiovi/QuatRotation"),
+	Scene:require("./bongiovi/Scene"),
+	Camera:require("./bongiovi/Camera"),
+	SimpleCamera:require("./bongiovi/SimpleCamera"),
+	CameraPerspective:require("./bongiovi/CameraPerspective"),
+	CameraOrtho:require("./bongiovi/CameraOrtho"),
+	Mesh:require("./bongiovi/Mesh"),
+	Face:require("./bongiovi/Face"),
+	GLShader:require("./bongiovi/GLShader"),
+	GLTexture:require("./bongiovi/GLTexture"),
+	ShaderLibs:require("./bongiovi/ShaderLibs"),
+	View:require("./bongiovi/View"),
+	ViewCopy:require("./bongiovi/ViewCopy"),
+	ViewAxis:require("./bongiovi/ViewAxis"),
+	ViewDotPlane:require("./bongiovi/ViewDotPlanes"),
+	MeshUtils:require("./bongiovi/MeshUtils"),
+	FrameBuffer:require("./bongiovi/FrameBuffer"),
+	EventDispatcher:require("./bongiovi/EventDispatcher"),
+	glm:require("gl-matrix"),
+
+	post: {
+		Pass:require("./bongiovi/post/Pass"),
+		EffectComposer:require("./bongiovi/post/EffectComposer"),
+		PassGreyscale:require("./bongiovi/post/PassGreyscale")
+	}
 };
+/*/
+bongiovi.post = {
+	Pass:_dereq_("./bongiovi/post/Pass"),
+	EffectComposer:_dereq_("./bongiovi/post/EffectComposer"),
+	PassGreyscale:_dereq_("./bongiovi/post/PassGreyscale")
+};
+//*/
 
 module.exports = bongiovi;
-},{"./bongiovi/Camera":3,"./bongiovi/CameraPerspective":4,"./bongiovi/EaseNumber":5,"./bongiovi/Face":6,"./bongiovi/FrameBuffer":7,"./bongiovi/GLShader":8,"./bongiovi/GLTexture":9,"./bongiovi/GLTools":10,"./bongiovi/Mesh":11,"./bongiovi/MeshUtils":12,"./bongiovi/QuatRotation":13,"./bongiovi/Scene":14,"./bongiovi/Scheduler":15,"./bongiovi/ShaderLibs":16,"./bongiovi/SimpleCamera":17,"./bongiovi/SimpleImageLoader":18,"./bongiovi/View":19,"./bongiovi/ViewAxis":20,"./bongiovi/ViewCopy":21,"./bongiovi/ViewDotPlanes":22,"gl-matrix":2}],2:[function(_dereq_,module,exports){
+},{"./bongiovi":3,"./bongiovi/post/EffectComposer":28,"./bongiovi/post/Pass":29,"./bongiovi/post/PassGreyscale":30}],2:[function(_dereq_,module,exports){
 /**
  * @fileoverview gl-matrix - High performance matrix and vector operations
  * @author Brandon Jones
@@ -10783,6 +11012,41 @@ if(typeof(exports) !== 'undefined') {
 },{}],3:[function(_dereq_,module,exports){
 "use strict";
 
+var GLTools = _dereq_("./bongiovi/GLTools");
+
+var bongiovi = {
+	GL:GLTools,
+	GLTools:GLTools,
+	Scheduler:_dereq_("./bongiovi/Scheduler"),
+	SimpleImageLoader:_dereq_("./bongiovi/SimpleImageLoader"),
+	EaseNumber:_dereq_("./bongiovi/EaseNumber"),
+	QuatRotation:_dereq_("./bongiovi/QuatRotation"),
+	Scene:_dereq_("./bongiovi/Scene"),
+	Camera:_dereq_("./bongiovi/Camera"),
+	SimpleCamera:_dereq_("./bongiovi/SimpleCamera"),
+	CameraOrtho:_dereq_("./bongiovi/CameraOrtho"),
+	CameraPerspective:_dereq_("./bongiovi/CameraPerspective"),
+	Mesh:_dereq_("./bongiovi/Mesh"),
+	Face:_dereq_("./bongiovi/Face"),
+	GLShader:_dereq_("./bongiovi/GLShader"),
+	GLTexture:_dereq_("./bongiovi/GLTexture"),
+	GLCubeTexture:_dereq_("./bongiovi/GLCubeTexture"),
+	ShaderLibs:_dereq_("./bongiovi/ShaderLibs"),
+	View:_dereq_("./bongiovi/View"),
+	ViewCopy:_dereq_("./bongiovi/ViewCopy"),
+	ViewAxis:_dereq_("./bongiovi/ViewAxis"),
+	ViewDotPlane:_dereq_("./bongiovi/ViewDotPlanes"),
+	MeshUtils:_dereq_("./bongiovi/MeshUtils"),
+	FrameBuffer:_dereq_("./bongiovi/FrameBuffer"),
+	EventDispatcher:_dereq_("./bongiovi/EventDispatcher"),
+	ObjLoader:_dereq_("./bongiovi/ObjLoader"),
+	glm:_dereq_("gl-matrix")
+};
+
+module.exports = bongiovi;
+},{"./bongiovi/Camera":4,"./bongiovi/CameraOrtho":5,"./bongiovi/CameraPerspective":6,"./bongiovi/EaseNumber":7,"./bongiovi/EventDispatcher":8,"./bongiovi/Face":9,"./bongiovi/FrameBuffer":10,"./bongiovi/GLCubeTexture":11,"./bongiovi/GLShader":12,"./bongiovi/GLTexture":13,"./bongiovi/GLTools":14,"./bongiovi/Mesh":15,"./bongiovi/MeshUtils":16,"./bongiovi/ObjLoader":17,"./bongiovi/QuatRotation":18,"./bongiovi/Scene":19,"./bongiovi/Scheduler":20,"./bongiovi/ShaderLibs":21,"./bongiovi/SimpleCamera":22,"./bongiovi/SimpleImageLoader":23,"./bongiovi/View":24,"./bongiovi/ViewAxis":25,"./bongiovi/ViewCopy":26,"./bongiovi/ViewDotPlanes":27,"gl-matrix":2}],4:[function(_dereq_,module,exports){
+"use strict";
+
 var glm = _dereq_("gl-matrix");
 
 var Camera = function() {
@@ -10805,7 +11069,52 @@ p.getMatrix = function() {
 };
 
 module.exports = Camera;
-},{"gl-matrix":2}],4:[function(_dereq_,module,exports){
+},{"gl-matrix":2}],5:[function(_dereq_,module,exports){
+// CameraOrtho.js
+
+"use strict";
+
+var Camera = _dereq_("./Camera");
+var glm = _dereq_("gl-matrix");
+
+
+var CameraOrtho = function() {
+	Camera.call(this);
+
+	var eye            = glm.vec3.clone([0, 0, 500]  );
+	var center         = glm.vec3.create( );
+	var up             = glm.vec3.clone( [0,-1,0] );
+	this.lookAt(eye, center, up);
+
+	this.projection = glm.mat4.create();
+};
+
+var p = CameraOrtho.prototype = new Camera();
+
+
+p.setBoundary = function(left, right, top, bottom) {
+	this.left = left;
+	this.right = right;
+	this.top = top;
+	this.bottom = bottom;
+	glm.mat4.ortho(this.projection, left, right, top, bottom, 0, 10000);
+};
+
+
+p.ortho = p.setBoundary;
+
+p.getMatrix = function() {
+	return this.matrix;
+};
+
+
+p.resize = function() {
+	glm.mat4.ortho(this.projection, this.left, this.right, this.top, this.bottom, 0, 10000);
+};
+
+
+module.exports = CameraOrtho;
+},{"./Camera":4,"gl-matrix":2}],6:[function(_dereq_,module,exports){
 // CameraPerspective.js
 "use strict";
 
@@ -10848,7 +11157,7 @@ p.__defineGetter__("far", function() {
 });
 
 module.exports = CameraPerspective;
-},{"./Camera":3,"gl-matrix":2}],5:[function(_dereq_,module,exports){
+},{"./Camera":4,"gl-matrix":2}],7:[function(_dereq_,module,exports){
 // EaseNumber.js
 
 "use strict";
@@ -10919,7 +11228,131 @@ p.__defineSetter__("value", function(mValue) {
 
 
 module.exports = EaseNumber;
-},{"./Scheduler":15}],6:[function(_dereq_,module,exports){
+},{"./Scheduler":20}],8:[function(_dereq_,module,exports){
+// EventDispatcher.js
+
+"use strict";
+
+var supportsCustomEvents = true;
+try {
+	var newTestCustomEvent = document.createEvent("CustomEvent");
+	newTestCustomEvent = null;
+} catch(e){
+	supportsCustomEvents = false;
+}
+
+function EventDispatcher() {
+	this._eventListeners = null;
+}
+
+
+var p = EventDispatcher.prototype;
+
+
+p.addEventListener = function(aEventType, aFunction) {
+
+	if(this._eventListeners === null) {
+		this._eventListeners = {};
+	}
+	if(!this._eventListeners[aEventType]){
+		this._eventListeners[aEventType] = [];
+	}
+	this._eventListeners[aEventType].push(aFunction);
+	
+	return this;
+};
+
+p.removeEventListener = function(aEventType, aFunction) {
+	if(this._eventListeners === null) {
+		this._eventListeners = {};
+	}
+	var currentArray = this._eventListeners[aEventType];
+	
+	if (typeof(currentArray) === "undefined") {
+		// console.warn("EventDispatcher :: removeEventListener :: Tried to remove an event handler (for " + aEventType +") that doesn't exist");
+		return this;
+	}
+	
+	var currentArrayLength = currentArray.length;
+	for(var i = 0; i < currentArrayLength; i++){
+		if(currentArray[i] === aFunction){
+			currentArray.splice(i, 1);
+			i--;
+			currentArrayLength--;
+		}
+	}
+	return this;
+};
+
+p.dispatchEvent = function(aEvent) {
+	if(this._eventListeners === null) {
+		this._eventListeners = {};
+	}
+	var eventType = aEvent.type;
+	
+	try {
+		if(aEvent.target === null) {
+			aEvent.target = this;
+		}
+		aEvent.currentTarget = this;
+	}
+	catch(theError) {
+		var newEvent = {"type" : eventType, "detail" : aEvent.detail, "dispatcher" : this };
+		return this.dispatchEvent(newEvent);
+	}
+	
+	var currentEventListeners = this._eventListeners[eventType];
+	if(currentEventListeners !== null && currentEventListeners !== undefined) {
+		var currentArray = this._copyArray(currentEventListeners);
+		var currentArrayLength = currentArray.length;
+		for(var i = 0; i < currentArrayLength; i++){
+			var currentFunction = currentArray[i];
+			currentFunction.call(this, aEvent);
+		}
+	}
+	return this;
+};
+
+p.dispatchCustomEvent = function(aEventType, aDetail) {
+	var newEvent;
+	if (supportsCustomEvents){
+		newEvent = document.createEvent("CustomEvent");
+		newEvent.dispatcher = this;
+		newEvent.initCustomEvent(aEventType, false, false, aDetail);
+	}
+	else {
+		newEvent = {"type" : aEventType, "detail" : aDetail, "dispatcher" : this };
+	}
+	return this.dispatchEvent(newEvent);
+};
+
+p._destroy = function() {
+	if(this._eventListeners !== null) {
+		for(var objectName in this._eventListeners) {
+			if(this._eventListeners.hasOwnProperty(objectName)) {
+				var currentArray = this._eventListeners[objectName];
+				var currentArrayLength = currentArray.length;
+				for(var i = 0; i < currentArrayLength; i++) {
+					currentArray[i] = null;
+				}
+				delete this._eventListeners[objectName];	
+			}
+		}
+		this._eventListeners = null;
+	}
+};
+
+p._copyArray = function(aArray) {
+	var currentArray = new Array(aArray.length);
+	var currentArrayLength = currentArray.length;
+	for(var i = 0; i < currentArrayLength; i++) {
+		currentArray[i] = aArray[i];
+	}
+	return currentArray;
+};
+
+module.exports = EventDispatcher;
+},{}],9:[function(_dereq_,module,exports){
 "use strict";
 
 var glm = _dereq_("gl-matrix");
@@ -10961,12 +11394,14 @@ var equal = function(mV0, mV1) {
 };
 
 module.exports = Face;
-},{"gl-matrix":2}],7:[function(_dereq_,module,exports){
+},{"gl-matrix":2}],10:[function(_dereq_,module,exports){
 "use strict";
 
 var gl, GL = _dereq_("./GLTools");
 var GLTexture = _dereq_("./GLTexture");
-var isPowerOfTwo = function(x) {	return !(x === 0) && !(x & (x - 1));	};
+var isPowerOfTwo = function(x) {	
+	return (x !== 0) && !(x & (x - 1));	
+};
 
 var FrameBuffer = function(width, height, options) {
 	gl = GL.gl;
@@ -11092,7 +11527,63 @@ p.destroy = function() {
 };
 
 module.exports = FrameBuffer;
-},{"./GLTexture":9,"./GLTools":10}],8:[function(_dereq_,module,exports){
+},{"./GLTexture":13,"./GLTools":14}],11:[function(_dereq_,module,exports){
+"use strict";
+
+var gl;
+var GL = _dereq_("./GLTools");
+
+var GLCubeTexture = function(sources, options) {
+	// [posx, negx, posy, negy, posz, negz]
+	options = options || {};
+	gl = GL.gl;
+	this.texture = gl.createTexture();
+	
+	this.magFilter = options.magFilter || gl.LINEAR;
+	this.minFilter = options.minFilter || gl.LINEAR_MIPMAP_NEAREST;
+	this.wrapS     = options.wrapS || gl.CLAMP_TO_EDGE;
+	this.wrapT     = options.wrapT || gl.CLAMP_TO_EDGE;
+
+	gl.bindTexture(gl.TEXTURE_CUBE_MAP, this.texture);
+	var targets = [
+		gl.TEXTURE_CUBE_MAP_POSITIVE_X, gl.TEXTURE_CUBE_MAP_NEGATIVE_X, 
+		gl.TEXTURE_CUBE_MAP_POSITIVE_Y, gl.TEXTURE_CUBE_MAP_NEGATIVE_Y, 
+		gl.TEXTURE_CUBE_MAP_POSITIVE_Z, gl.TEXTURE_CUBE_MAP_NEGATIVE_Z 
+	];
+
+	for (var j = 0; j < 6; j++) {
+	    gl.texImage2D(targets[j], 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sources[j]);
+	    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_S, this.wrapS);
+	    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_T, this.wrapT);
+	}
+	gl.generateMipmap(gl.TEXTURE_CUBE_MAP);
+
+	gl.bindTexture(gl.TEXTURE_CUBE_MAP, null);
+};
+
+var p = GLCubeTexture.prototype;
+
+
+p.bind = function(index) {
+	if(index === undefined) {index = 0;}
+	if(!GL.shader) {return;}
+
+	gl.bindTexture(gl.TEXTURE_CUBE_MAP, this.texture);
+	gl.uniform1i(GL.shader.uniformTextures[index], index);
+	this._bindIndex = index;
+};
+
+
+p.unbind = function() {
+	gl.bindTexture(gl.TEXTURE_CUBE_MAP, null);	
+};
+
+p.destroy = function() {
+	gl.deleteTexture(this.texture);
+};
+
+module.exports = GLCubeTexture;
+},{"./GLTools":14}],12:[function(_dereq_,module,exports){
 "use strict";
 
 var GL = _dereq_("./GLTools");
@@ -11226,6 +11717,8 @@ p.bind = function() {
 
 	if(this.shaderProgram.pMatrixUniform === undefined) {	this.shaderProgram.pMatrixUniform = gl.getUniformLocation(this.shaderProgram, "uPMatrix");}
 	if(this.shaderProgram.mvMatrixUniform === undefined) {	this.shaderProgram.mvMatrixUniform = gl.getUniformLocation(this.shaderProgram, "uMVMatrix");}
+	if(this.shaderProgram.normalMatrixUniform === undefined) {	this.shaderProgram.normalMatrixUniform = gl.getUniformLocation(this.shaderProgram, "normalMatrix");}
+	if(this.shaderProgram.invertMVMatrixUniform === undefined) {	this.shaderProgram.invertMVMatrixUniform = gl.getUniformLocation(this.shaderProgram, "invertMVMatrix");}
 
 	GL.setShader(this);
 	GL.setShaderProgram(this.shaderProgram);
@@ -11351,14 +11844,14 @@ p.destroy = function() {
 };
 
 module.exports = GLShader;
-},{"./GLTools":10,"./ShaderLibs":16}],9:[function(_dereq_,module,exports){
+},{"./GLTools":14,"./ShaderLibs":21}],13:[function(_dereq_,module,exports){
 // GLTexture.js
 "use strict";
 
 var gl;
 var GL = _dereq_("./GLTools");
 var _isPowerOfTwo = function(x) {	
-	var check = !(x === 0) && (!(x & (x - 1)));
+	var check = (x !== 0) && (!(x & (x - 1)));
 	return check;
 };
 var isPowerOfTwo = function(obj) {	
@@ -11456,7 +11949,7 @@ p.destroy = function() {
 };
 
 module.exports = GLTexture;
-},{"./GLTools":10}],10:[function(_dereq_,module,exports){
+},{"./GLTools":14}],14:[function(_dereq_,module,exports){
 // GLTools.js
 "use strict";
 
@@ -11504,6 +11997,7 @@ p.init = function(mCanvas, mWidth, mHeight, parameters) {
 	this.matrix                 = glm.mat4.create();
 	glm.mat4.identity(this.matrix);
 	this.normalMatrix           = glm.mat3.create();
+	this.invertMVMatrix         = glm.mat3.create();
 	this.depthTextureExt        = this.gl.getExtension("WEBKIT_WEBGL_depth_texture"); // Or browser-appropriate prefix
 	this.floatTextureExt        = this.gl.getExtension("OES_texture_float"); // Or browser-appropriate prefix
 	this.floatTextureLinearExt  = this.gl.getExtension("OES_texture_float_linear"); // Or browser-appropriate prefix
@@ -11549,6 +12043,9 @@ p.rotate = function(aRotation) {
 	glm.mat3.fromMat4(this.normalMatrix, this.matrix);
 	glm.mat3.invert(this.normalMatrix, this.normalMatrix);
 	glm.mat3.transpose(this.normalMatrix, this.normalMatrix);
+
+	glm.mat3.fromMat4(this.invertMVMatrix, this.matrix);
+	glm.mat3.invert(this.invertMVMatrix, this.invertMVMatrix);
 };
 
 
@@ -11574,6 +12071,7 @@ p.draw = function(aMesh) {
 		return;
 	}
 
+	//	PROJECTION MATRIX
 	if(!this.shaderProgram.pMatrixValue) {
 		this.shaderProgram.pMatrixValue = glm.mat4.create();
 		this.gl.uniformMatrix4fv(this.shaderProgram.pMatrixUniform, false, this.camera.projection || this.camera.getMatrix() );
@@ -11586,6 +12084,7 @@ p.draw = function(aMesh) {
 		}
 	}
 
+	//	MODEL-VIEW MATRIX
 	if(!this.shaderProgram.mvMatrixValue) {
 		this.shaderProgram.mvMatrixValue = glm.mat4.create();
 		this.gl.uniformMatrix4fv(this.shaderProgram.mvMatrixUniform, false, this.matrix );
@@ -11596,6 +12095,32 @@ p.draw = function(aMesh) {
 			glm.mat4.copy(this.shaderProgram.mvMatrixValue, this.matrix);
 		}
 	}
+	
+	
+    //	INVERT MODEL-VIEW MATRIX
+	if(!this.shaderProgram.invertMVMatrixValue) {
+		this.shaderProgram.invertMVMatrixValue = glm.mat3.create();
+		this.gl.uniformMatrix3fv(this.shaderProgram.invertMVMatrixUniform, false, this.invertMVMatrix );
+		glm.mat3.copy(this.shaderProgram.invertMVMatrixValue, this.invertMVMatrix);
+	} else {
+		if(glm.mat3.str(this.shaderProgram.invertMVMatrixValue) !== glm.mat3.str(this.invertMVMatrix)) {
+			this.gl.uniformMatrix3fv(this.shaderProgram.invertMVMatrixUniform, false, this.invertMVMatrix );
+			glm.mat3.copy(this.shaderProgram.invertMVMatrixValue, this.invertMVMatrix);
+		}
+	}
+
+	//	NORMAL MATRIX
+	if(!this.shaderProgram.normalMatrixValue) {
+		this.shaderProgram.normalMatrixValue = glm.mat4.create();
+		this.gl.uniformMatrix3fv(this.shaderProgram.normalMatrixUniform, false, this.normalMatrix );
+		glm.mat3.copy(this.shaderProgram.normalMatrixValue, this.normalMatrix);
+	} else {
+		if(glm.mat3.str(this.shaderProgram.normalMatrixValue) !== glm.mat3.str(this.normalMatrix)) {
+			this.gl.uniformMatrix3fv(this.shaderProgram.normalMatrixUniform, false, this.normalMatrix );
+			glm.mat3.copy(this.shaderProgram.normalMatrixValue, this.normalMatrix);
+		}
+	}
+
 
 
 	// 	VERTEX POSITIONS
@@ -11690,7 +12215,7 @@ GLTools.getInstance = function() {
 
 
 module.exports = GLTools.getInstance();
-},{"gl-matrix":2}],11:[function(_dereq_,module,exports){
+},{"gl-matrix":2}],15:[function(_dereq_,module,exports){
 "use strict";
 
 var Face = _dereq_("./Face");
@@ -11864,33 +12389,64 @@ p._generateFaces = function() {
 };
 
 module.exports = Mesh;
-},{"./Face":6,"./GLTools":10,"gl-matrix":2}],12:[function(_dereq_,module,exports){
+},{"./Face":9,"./GLTools":14,"gl-matrix":2}],16:[function(_dereq_,module,exports){
 "use strict";
 
 var GL = _dereq_("./GLTools");
 var Mesh = _dereq_("./Mesh");
 var MeshUtils = {};
 
-MeshUtils.createPlane = function(width, height, numSegments) {
+MeshUtils.createPlane = function(width, height, numSegments, withNormals, axis) {
+	axis          = axis === undefined ? "xy" : axis;
+	withNormals   = withNormals === undefined ? false : withNormals;
 	var positions = [];
-	var coords = [];
-	var indices = [];
+	var coords    = [];
+	var indices   = [];
+	var normals   = [];
 
-	var gapX = width/numSegments;
-	var gapY = height/numSegments;
+	var gapX  = width/numSegments;
+	var gapY  = height/numSegments;
 	var gapUV = 1/numSegments;
 	var index = 0;
-	var sx = -width * 0.5;
-	var sy = -height * 0.5;
+	var sx    = -width * 0.5;
+	var sy    = -height * 0.5;
 
 	for(var i=0; i<numSegments; i++) {
 		for (var j=0; j<numSegments; j++) {
 			var tx = gapX * i + sx;
 			var ty = gapY * j + sy;
-			positions.push([tx, 		ty, 	0]);
-			positions.push([tx+gapX, 	ty, 	0]);
-			positions.push([tx+gapX, 	ty+gapY, 	0]);
-			positions.push([tx, 		ty+gapY, 	0]);
+
+			if(axis === 'xz') {
+				positions.push([tx, 		0, 	ty+gapY	]);
+				positions.push([tx+gapX, 	0, 	ty+gapY	]);
+				positions.push([tx+gapX, 	0, 	ty	]);
+				positions.push([tx, 		0, 	ty	]);	
+
+				normals.push([0, 1, 0]);
+				normals.push([0, 1, 0]);
+				normals.push([0, 1, 0]);
+				normals.push([0, 1, 0]);
+			} else if(axis === 'yz') {
+				positions.push([0, tx, 		ty]);
+				positions.push([0, tx+gapX, ty]);
+				positions.push([0, tx+gapX, ty+gapY]);
+				positions.push([0, tx, 		ty+gapY]);	
+
+				normals.push([1, 0, 0]);
+				normals.push([1, 0, 0]);
+				normals.push([1, 0, 0]);
+				normals.push([1, 0, 0]);
+			} else {
+				positions.push([tx, 		ty, 	0]);
+				positions.push([tx+gapX, 	ty, 	0]);
+				positions.push([tx+gapX, 	ty+gapY, 	0]);
+				positions.push([tx, 		ty+gapY, 	0]);	
+
+				normals.push([0, 0, 1]);
+				normals.push([0, 0, 1]);
+				normals.push([0, 0, 1]);
+				normals.push([0, 0, 1]);
+			} 
 
 			var u = i/numSegments;
 			var v = j/numSegments;
@@ -11914,21 +12470,27 @@ MeshUtils.createPlane = function(width, height, numSegments) {
 	mesh.bufferVertex(positions);
 	mesh.bufferTexCoords(coords);
 	mesh.bufferIndices(indices);
+	if(withNormals) {
+		mesh.bufferData(normals, "aNormal", 3);
+	}
 
 	return mesh;
 };
 
-MeshUtils.createSphere = function(size, numSegments) {
+MeshUtils.createSphere = function(size, numSegments, withNormals) {
+	withNormals   = withNormals === undefined ? false : withNormals;
 	var positions = [];
-	var coords = [];
-	var indices = [];
-	var index = 0;
-	var gapUV = 1/numSegments;
+	var coords    = [];
+	var indices   = [];
+	var normals   = [];
+	var index     = 0;
+	var gapUV     = 1/numSegments;
 
-	var getPosition = function(i, j) {	//	rx : -90 ~ 90 , ry : 0 ~ 360
+	var getPosition = function(i, j, isNormal) {	//	rx : -90 ~ 90 , ry : 0 ~ 360
+		isNormal = isNormal === undefined ? false : isNormal;
 		var rx = i/numSegments * Math.PI - Math.PI * 0.5;
 		var ry = j/numSegments * Math.PI * 2;
-		var r = size;
+		var r = isNormal ? 1 : size;
 		var pos = [];
 		pos[1] = Math.sin(rx) * r;
 		var t = Math.cos(rx) * r;
@@ -11950,6 +12512,14 @@ MeshUtils.createSphere = function(size, numSegments) {
 			positions.push(getPosition(i+1, j));
 			positions.push(getPosition(i+1, j+1));
 			positions.push(getPosition(i, j+1));
+
+			if(withNormals) {
+				normals.push(getPosition(i, j, true));
+				normals.push(getPosition(i+1, j, true));
+				normals.push(getPosition(i+1, j+1, true));
+				normals.push(getPosition(i, j+1, true));	
+			}
+			
 
 			var u = j/numSegments;
 			var v = i/numSegments;
@@ -11976,13 +12546,649 @@ MeshUtils.createSphere = function(size, numSegments) {
 	mesh.bufferVertex(positions);
 	mesh.bufferTexCoords(coords);
 	mesh.bufferIndices(indices);
+	console.log('With normals :', withNormals);
+	if(withNormals) {
+		mesh.bufferData(normals, "aNormal", 3);
+	}
 
 	return mesh;
 };
 
+MeshUtils.createCube = function(w,h,d, withNormals) {
+	withNormals   = withNormals === undefined ? false : withNormals;
+	h = h || w;
+	d = d || w;
+
+	var x = w/2;
+	var y = h/2;
+	var z = d/2;
+
+	var positions = [];
+	var coords    = [];
+	var indices   = []; 
+	var normals   = []; 
+	var count     = 0;
+
+
+	// BACK
+	positions.push([-x,  y, -z]);
+	positions.push([ x,  y, -z]);
+	positions.push([ x, -y, -z]);
+	positions.push([-x, -y, -z]);
+
+	normals.push([0, 0, -1]);
+	normals.push([0, 0, -1]);
+	normals.push([0, 0, -1]);
+	normals.push([0, 0, -1]);
+
+	coords.push([0, 0]);
+	coords.push([1, 0]);
+	coords.push([1, 1]);
+	coords.push([0, 1]);
+
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 1);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 3);
+
+	count ++;
+
+	// RIGHT
+	positions.push([ x,  y, -z]);
+	positions.push([ x,  y,  z]);
+	positions.push([ x, -y,  z]);
+	positions.push([ x, -y, -z]);
+
+	normals.push([1, 0, 0]);
+	normals.push([1, 0, 0]);
+	normals.push([1, 0, 0]);
+	normals.push([1, 0, 0]);
+
+	coords.push([0, 0]);
+	coords.push([1, 0]);
+	coords.push([1, 1]);
+	coords.push([0, 1]);
+
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 1);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 3);
+
+	count ++;
+
+	// FRONT
+	positions.push([ x,  y,  z]);
+	positions.push([-x,  y,  z]);
+	positions.push([-x, -y,  z]);
+	positions.push([ x, -y,  z]);
+
+	normals.push([0, 0, 1]);
+	normals.push([0, 0, 1]);
+	normals.push([0, 0, 1]);
+	normals.push([0, 0, 1]);
+
+	coords.push([0, 0]);
+	coords.push([1, 0]);
+	coords.push([1, 1]);
+	coords.push([0, 1]);
+
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 1);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 3);
+
+	count ++;
+
+
+	// LEFT
+	positions.push([-x,  y,  z]);
+	positions.push([-x,  y, -z]);
+	positions.push([-x, -y, -z]);
+	positions.push([-x, -y,  z]);
+
+	normals.push([-1, 0, 0]);
+	normals.push([-1, 0, 0]);
+	normals.push([-1, 0, 0]);
+	normals.push([-1, 0, 0]);
+
+	coords.push([0, 0]);
+	coords.push([1, 0]);
+	coords.push([1, 1]);
+	coords.push([0, 1]);
+
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 1);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 3);
+
+	count ++;
+
+	// TOP
+	positions.push([-x,  y,  z]);
+	positions.push([ x,  y,  z]);
+	positions.push([ x,  y, -z]);
+	positions.push([-x,  y, -z]);
+
+	normals.push([0, 1, 0]);
+	normals.push([0, 1, 0]);
+	normals.push([0, 1, 0]);
+	normals.push([0, 1, 0]);
+
+	coords.push([0, 0]);
+	coords.push([1, 0]);
+	coords.push([1, 1]);
+	coords.push([0, 1]);
+
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 1);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 3);
+
+	count ++;
+
+	// BOTTOM
+	positions.push([-x, -y, -z]);
+	positions.push([ x, -y, -z]);
+	positions.push([ x, -y,  z]);
+	positions.push([-x, -y,  z]);
+
+	normals.push([0, -1, 0]);
+	normals.push([0, -1, 0]);
+	normals.push([0, -1, 0]);
+	normals.push([0, -1, 0]);
+
+	coords.push([0, 0]);
+	coords.push([1, 0]);
+	coords.push([1, 1]);
+	coords.push([0, 1]);
+
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 1);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 3);
+
+	count ++;
+
+
+	var mesh = new Mesh(positions.length, indices.length, GL.gl.TRIANGLES);
+	mesh.bufferVertex(positions);
+	mesh.bufferTexCoords(coords);
+	mesh.bufferIndices(indices);
+	if(withNormals) {
+		mesh.bufferData(normals, "aNormal", 3);
+	}
+
+	return mesh;
+};
+
+MeshUtils.createSkyBox = function(size, withNormals) {
+	withNormals   = withNormals === undefined ? false : withNormals;
+
+	var positions = [];
+	var coords    = [];
+	var indices   = []; 
+	var normals   = []; 
+	var count     = 0;
+
+	// BACK
+	positions.push([ size,  size, -size]);
+	positions.push([-size,  size, -size]);
+	positions.push([-size, -size, -size]);
+	positions.push([ size, -size, -size]);
+
+	normals.push([0, 0, -1]);
+	normals.push([0, 0, -1]);
+	normals.push([0, 0, -1]);
+	normals.push([0, 0, -1]);
+
+	coords.push([0, 0]);
+	coords.push([1, 0]);
+	coords.push([1, 1]);
+	coords.push([0, 1]);
+
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 1);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 3);
+
+	count ++;
+
+	// RIGHT
+	positions.push([ size, -size, -size]);
+	positions.push([ size, -size,  size]);
+	positions.push([ size,  size,  size]);
+	positions.push([ size,  size, -size]);
+
+	normals.push([1, 0, 0]);
+	normals.push([1, 0, 0]);
+	normals.push([1, 0, 0]);
+	normals.push([1, 0, 0]);
+
+	coords.push([0, 0]);
+	coords.push([1, 0]);
+	coords.push([1, 1]);
+	coords.push([0, 1]);
+
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 1);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 3);
+
+	count ++;
+
+	// FRONT
+	positions.push([-size,  size,  size]);
+	positions.push([ size,  size,  size]);
+	positions.push([ size, -size,  size]);
+	positions.push([-size, -size,  size]);
+
+	normals.push([0, 0, 1]);
+	normals.push([0, 0, 1]);
+	normals.push([0, 0, 1]);
+	normals.push([0, 0, 1]);
+
+	coords.push([0, 0]);
+	coords.push([1, 0]);
+	coords.push([1, 1]);
+	coords.push([0, 1]);
+
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 1);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 3);
+
+	count ++;
+
+	// LEFT
+	positions.push([-size, -size,  size]);
+	positions.push([-size, -size, -size]);
+	positions.push([-size,  size, -size]);
+	positions.push([-size,  size,  size]);
+
+	normals.push([-1, 0, 0]);
+	normals.push([-1, 0, 0]);
+	normals.push([-1, 0, 0]);
+	normals.push([-1, 0, 0]);
+
+	coords.push([0, 0]);
+	coords.push([1, 0]);
+	coords.push([1, 1]);
+	coords.push([0, 1]);
+
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 1);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 3);
+
+	count ++;
+
+	// TOP
+	positions.push([ size,  size,  size]);
+	positions.push([-size,  size,  size]);
+	positions.push([-size,  size, -size]);
+	positions.push([ size,  size, -size]);
+
+	normals.push([0, 1, 0]);
+	normals.push([0, 1, 0]);
+	normals.push([0, 1, 0]);
+	normals.push([0, 1, 0]);
+
+	coords.push([0, 0]);
+	coords.push([1, 0]);
+	coords.push([1, 1]);
+	coords.push([0, 1]);
+
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 1);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 3);
+
+	count ++;
+
+	// BOTTOM
+	positions.push([ size, -size, -size]);
+	positions.push([-size, -size, -size]);
+	positions.push([-size, -size,  size]);
+	positions.push([ size, -size,  size]);
+
+	normals.push([0, -1, 0]);
+	normals.push([0, -1, 0]);
+	normals.push([0, -1, 0]);
+	normals.push([0, -1, 0]);
+
+	coords.push([0, 0]);
+	coords.push([1, 0]);
+	coords.push([1, 1]);
+	coords.push([0, 1]);
+
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 1);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 3);
+
+	var mesh = new Mesh(positions.length, indices.length, GL.gl.TRIANGLES);
+	mesh.bufferVertex(positions);
+	mesh.bufferTexCoords(coords);
+	mesh.bufferIndices(indices);
+	if(withNormals) {
+		mesh.bufferData(normals, "aNormal", 3);
+	}
+
+	return mesh;
+};
 
 module.exports = MeshUtils;
-},{"./GLTools":10,"./Mesh":11}],13:[function(_dereq_,module,exports){
+},{"./GLTools":14,"./Mesh":15}],17:[function(_dereq_,module,exports){
+// ObjLoader.js
+
+"use strict";
+
+var GL = _dereq_("./GLTools");
+var Mesh = _dereq_("./Mesh");
+var gl;
+
+
+function ObjLoader() {
+	this._clearAll();
+}
+
+
+var p = ObjLoader.prototype;
+
+p._clearAll = function() {
+	this._callback      = null;
+	this._callbackError = null;
+	this._mesh          = [];	
+	this._drawingType 	= "";
+};
+
+p.load = function(url, callback, callbackError, ignoreNormals, drawingType) {
+	this._clearAll();
+	if(!gl) {	gl = GL.gl;	}
+	this._drawingType = drawingType === undefined ? gl.TRIANGLES : drawingType;
+	this._ignoreNormals = ignoreNormals === undefined ? true : ignoreNormals;
+
+	this._callback = callback;
+	this._callbackError = callbackError;
+
+	var request = new XMLHttpRequest();
+	request.onreadystatechange = this._onXHTPState.bind(this);
+	request.open("GET", url, true);
+	request.send();
+};
+
+p._onXHTPState = function(e) {
+	if(e.target.readyState === 4) {
+		this._parseObj(e.target.response);
+	}
+};
+
+
+p.parse = function(objStr, callback, callbackError, ignoreNormals, drawingType) {
+	this._clearAll();
+	this._drawingType = drawingType === undefined ? gl.TRIANGLES : drawingType;
+	this._ignoreNormals = ignoreNormals === undefined ? true : ignoreNormals;
+
+	this._parseObj(objStr);
+};
+
+
+p._parseObj = function(objStr) {
+	var lines = objStr.split('\n');
+
+	var positions    = [];
+	var coords       = [];
+	var finalNormals = [];
+	var vertices     = [];
+	var normals      = [];
+	var uvs          = [];
+	var indices      = [];
+	var count        = 0;
+	var result;
+
+	// v float float float
+	var vertex_pattern = /v( +[\d|\.|\+|\-|e|E]+)( +[\d|\.|\+|\-|e|E]+)( +[\d|\.|\+|\-|e|E]+)/;
+
+	// vn float float float
+	var normal_pattern = /vn( +[\d|\.|\+|\-|e|E]+)( +[\d|\.|\+|\-|e|E]+)( +[\d|\.|\+|\-|e|E]+)/;
+
+	// vt float float
+	var uv_pattern = /vt( +[\d|\.|\+|\-|e|E]+)( +[\d|\.|\+|\-|e|E]+)/;
+
+	// f vertex vertex vertex ...
+	var face_pattern1 = /f( +-?\d+)( +-?\d+)( +-?\d+)( +-?\d+)?/;
+
+	// f vertex/uv vertex/uv vertex/uv ...
+	var face_pattern2 = /f( +(-?\d+)\/(-?\d+))( +(-?\d+)\/(-?\d+))( +(-?\d+)\/(-?\d+))( +(-?\d+)\/(-?\d+))?/;
+
+	// f vertex/uv/normal vertex/uv/normal vertex/uv/normal ...
+	var face_pattern3 = /f( +(-?\d+)\/(-?\d+)\/(-?\d+))( +(-?\d+)\/(-?\d+)\/(-?\d+))( +(-?\d+)\/(-?\d+)\/(-?\d+))( +(-?\d+)\/(-?\d+)\/(-?\d+))?/;
+
+	// f vertex//normal vertex//normal vertex//normal ... 
+	var face_pattern4 = /f( +(-?\d+)\/\/(-?\d+))( +(-?\d+)\/\/(-?\d+))( +(-?\d+)\/\/(-?\d+))( +(-?\d+)\/\/(-?\d+))?/;
+
+
+	function parseVertexIndex( value ) {
+		var index = parseInt( value );
+		return ( index >= 0 ? index - 1 : index + vertices.length / 3 ) * 3;
+	}
+
+	function parseNormalIndex( value ) {
+		var index = parseInt( value );
+		return ( index >= 0 ? index - 1 : index + normals.length / 3 ) * 3;
+	}
+
+	function parseUVIndex( value ) {
+		var index = parseInt( value );
+		return ( index >= 0 ? index - 1 : index + uvs.length / 2 ) * 2;
+	}
+
+
+	function addVertex(a, b ,c) {
+		positions.push([vertices[a], vertices[a+1], vertices[a+2]]);
+		positions.push([vertices[b], vertices[b+1], vertices[b+2]]);
+		positions.push([vertices[c], vertices[c+1], vertices[c+2]]);
+
+		indices.push(count * 3 + 0);
+		indices.push(count * 3 + 1);
+		indices.push(count * 3 + 2);
+
+		count ++;
+	}
+
+
+	function addUV(a, b, c) {
+		coords.push([uvs[a], uvs[a+1]]);
+		coords.push([uvs[b], uvs[b+1]]);
+		coords.push([uvs[c], uvs[c+1]]);
+	}
+
+
+	function addNormal(a, b, c) {
+		finalNormals.push([normals[a], normals[a+1], normals[a+2]]);
+		finalNormals.push([normals[b], normals[b+1], normals[b+2]]);
+		finalNormals.push([normals[c], normals[c+1], normals[c+2]]);
+	}
+
+	function addFace( a, b, c, d,  ua, ub, uc, ud,  na, nb, nc, nd ) {
+		var ia = parseVertexIndex( a );
+		var ib = parseVertexIndex( b );
+		var ic = parseVertexIndex( c );
+		var id;
+
+		if ( d === undefined ) {
+
+			addVertex( ia, ib, ic );
+
+		} else {
+
+			id = parseVertexIndex( d );
+
+			addVertex( ia, ib, id );
+			addVertex( ib, ic, id );
+
+		}
+
+
+		if ( ua !== undefined ) {
+
+			ia = parseUVIndex( ua );
+			ib = parseUVIndex( ub );
+			ic = parseUVIndex( uc );
+
+			if ( d === undefined ) {
+
+				addUV( ia, ib, ic );
+
+			} else {
+
+				id = parseUVIndex( ud );
+
+				addUV( ia, ib, id );
+				addUV( ib, ic, id );
+
+			}
+
+		}
+
+		if ( na !== undefined ) {
+
+			ia = parseNormalIndex( na );
+			ib = parseNormalIndex( nb );
+			ic = parseNormalIndex( nc );
+
+			if ( d === undefined ) {
+
+				addNormal( ia, ib, ic );
+
+			} else {
+
+				id = parseNormalIndex( nd );
+
+				addNormal( ia, ib, id );
+				addNormal( ib, ic, id );
+
+			}
+
+		}
+	}
+
+
+	for ( var i = 0; i < lines.length; i ++ ) {
+		var line = lines[ i ];
+		line = line.trim();
+
+		if ( line.length === 0 || line.charAt( 0 ) === '#' ) {
+
+			continue;
+
+		} else if ( ( result = vertex_pattern.exec( line ) ) !== null ) {
+
+			vertices.push(
+				parseFloat( result[ 1 ] ),
+				parseFloat( result[ 2 ] ),
+				parseFloat( result[ 3 ] )
+			);
+
+		} else if ( ( result = normal_pattern.exec( line ) ) !== null ) {
+
+			normals.push(
+				parseFloat( result[ 1 ] ),
+				parseFloat( result[ 2 ] ),
+				parseFloat( result[ 3 ] )
+			);
+
+		} else if ( ( result = uv_pattern.exec( line ) ) !== null ) {
+
+			uvs.push(
+				parseFloat( result[ 1 ] ),
+				parseFloat( result[ 2 ] )
+			);
+
+		} else if ( ( result = face_pattern1.exec( line ) ) !== null ) {
+
+			addFace(
+				result[ 1 ], result[ 2 ], result[ 3 ], result[ 4 ]
+			);
+
+		} else if ( ( result = face_pattern2.exec( line ) ) !== null ) {
+
+			addFace(
+				result[ 2 ], result[ 5 ], result[ 8 ], result[ 11 ],
+				result[ 3 ], result[ 6 ], result[ 9 ], result[ 12 ]
+			);
+
+		} else if ( ( result = face_pattern3.exec( line ) ) !== null ) {
+			addFace(
+				result[ 2 ], result[ 6 ], result[ 10 ], result[ 14 ],
+				result[ 3 ], result[ 7 ], result[ 11 ], result[ 15 ],
+				result[ 4 ], result[ 8 ], result[ 12 ], result[ 16 ]
+			);
+
+		} else if ( ( result = face_pattern4.exec( line ) ) !== null ) {
+			addFace(
+				result[ 2 ], result[ 5 ], result[ 8 ], result[ 11 ],
+				undefined, undefined, undefined, undefined,
+				result[ 3 ], result[ 6 ], result[ 9 ], result[ 12 ]
+			);
+
+		} 
+	}
+
+	this._generateMeshes({	
+		positions:positions,
+		coords:coords,
+		normals:finalNormals,
+		indices:indices
+	});
+	
+};
+
+
+p._generateMeshes = function(o) {
+	gl = GL.gl;
+
+	var mesh = new Mesh(o.positions.length, o.indices.length, this._drawingType);
+	mesh.bufferVertex(o.positions);
+	mesh.bufferTexCoords(o.coords);
+	mesh.bufferIndices(o.indices);
+	if(!this._ignoreNormals) {
+		mesh.bufferData(o.normals, "aNormal", 3);
+	}
+
+	if(this._callback) {
+		this._callback(mesh, o);
+	}
+};
+
+// var loader = new ObjLoader();
+
+module.exports = ObjLoader;
+},{"./GLTools":14,"./Mesh":15}],18:[function(_dereq_,module,exports){
 "use strict";
 
 var glm = _dereq_("gl-matrix");
@@ -12175,12 +13381,12 @@ p._updateRotation = function(aTempRotation) {
 
 
 module.exports = QuatRotation;
-},{"gl-matrix":2}],14:[function(_dereq_,module,exports){
+},{"gl-matrix":2}],19:[function(_dereq_,module,exports){
 "use strict";
 
 var GL = _dereq_("./GLTools");
 var QuatRotation = _dereq_("./QuatRotation");
-var Camera = _dereq_("./Camera");
+var CameraOrtho = _dereq_("./CameraOrtho");
 var SimpleCamera = _dereq_("./SimpleCamera");
 var glm = _dereq_("gl-matrix");
 
@@ -12198,16 +13404,24 @@ p._init = function() {
 	this.camera.setPerspective(45*Math.PI/180, GL.aspectRatio, 5, 3000);
 	this.camera.lockRotation();
 
-	var eye            = glm.vec3.clone([0, 0, 500]  );
-	var center         = glm.vec3.create( );
-	var up             = glm.vec3.clone( [0,-1,0] );
+	var eye                = glm.vec3.clone([0, 0, 500]  );
+	var center             = glm.vec3.create( );
+	var up                 = glm.vec3.clone( [0,-1,0] );
 	this.camera.lookAt(eye, center, up);
 	
-	this.sceneRotation = new QuatRotation(GL.canvas);
-	this.rotationFront = glm.mat4.create();
+	this.sceneRotation     = new QuatRotation(GL.canvas);
+	this.rotationFront     = glm.mat4.create();
 	glm.mat4.identity(this.rotationFront);
 	
-	this.cameraOtho    = new Camera();
+	this.cameraOrtho       = new CameraOrtho();
+	this.cameraOrthoScreen = new CameraOrtho();
+	this.cameraOtho        = this.cameraOrtho;
+
+	this.cameraOrtho.lookAt(eye, center, up);
+	this.cameraOrtho.ortho( 1, -1, 1, -1);
+
+	this.cameraOrthoScreen.lookAt(eye, center, up);
+	this.cameraOrthoScreen.ortho( 0, GL.width, GL.height, 0);
 
 	// In SuperClass should call following functions.
 	this._initTextures();
@@ -12239,9 +13453,9 @@ p.update = function() {
 };
 
 p.resize = function() {
-	if(this.camera.resize) {
-		this.camera.resize(GL.aspectRatio);
-	}
+	// if(this.camera.resize) {
+	// 	this.camera.resize(GL.aspectRatio);
+	// }
 };
 
 p.render = function() {
@@ -12249,10 +13463,11 @@ p.render = function() {
 };
 
 p._onResize = function() {
+	this.cameraOrthoScreen.ortho( 0, GL.width, GL.height, 0);
 };
 
 module.exports = Scene;
-},{"./Camera":3,"./GLTools":10,"./QuatRotation":13,"./SimpleCamera":17,"gl-matrix":2}],15:[function(_dereq_,module,exports){
+},{"./CameraOrtho":5,"./GLTools":14,"./QuatRotation":18,"./SimpleCamera":22,"gl-matrix":2}],20:[function(_dereq_,module,exports){
 // Scheduler.js
 
 "use strict";
@@ -12404,7 +13619,7 @@ Scheduler.getInstance = function() {
 };
 
 module.exports = Scheduler.getInstance();
-},{}],16:[function(_dereq_,module,exports){
+},{}],21:[function(_dereq_,module,exports){
 "use strict";
 
 
@@ -12412,17 +13627,25 @@ var ShaderLibs = function() { };
 
 ShaderLibs.shaders = {};
 
-ShaderLibs.shaders.copyVert = "#define GLSLIFY 1\n\n#define SHADER_NAME BASIC_VERTEXXXX\n\nprecision highp float;\nattribute vec3 aVertexPosition;\nattribute vec2 aTextureCoord;\n\nuniform mat4 uMVMatrix;\nuniform mat4 uPMatrix;\n\nvarying vec2 vTextureCoord;\n\nvoid main() {\n    gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);\n    vTextureCoord = aTextureCoord;\n}";
+ShaderLibs.shaders.copyVert = "#define GLSLIFY 1\n\n#define SHADER_NAME BASIC_VERTEX\n\nprecision highp float;\nattribute vec3 aVertexPosition;\nattribute vec2 aTextureCoord;\n\nuniform mat4 uMVMatrix;\nuniform mat4 uPMatrix;\n\nvarying vec2 vTextureCoord;\n\nvoid main(void) {\n    gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);\n    vTextureCoord = aTextureCoord;\n}";
+ShaderLibs.shaders.copyNormalVert = "#define GLSLIFY 1\n\n// copyWithNormals.vert\n\n#define SHADER_NAME BASIC_VERTEX\n\nprecision highp float;\nattribute vec3 aVertexPosition;\nattribute vec3 aNormal;\nattribute vec2 aTextureCoord;\n\nuniform mat4 uMVMatrix;\nuniform mat4 uPMatrix;\n\nvarying vec2 vTextureCoord;\nvarying vec3 vNormal;\nvarying vec3 vVertex;\n\nvoid main(void) {\n\tgl_Position   = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);\n\tvTextureCoord = aTextureCoord;\n\tvNormal       = aNormal;\n\tvVertex \t  = aVertexPosition;\n}";
 
 ShaderLibs.shaders.generalVert = "#define GLSLIFY 1\n\n#define SHADER_NAME GENERAL_VERTEX\n\nprecision highp float;\nattribute vec3 aVertexPosition;\nattribute vec2 aTextureCoord;\n\nuniform mat4 uMVMatrix;\nuniform mat4 uPMatrix;\nuniform vec3 position;\nuniform vec3 scale;\n\nvarying vec2 vTextureCoord;\n\nvoid main(void) {\n    vec3 pos = aVertexPosition;\n    pos *= scale;\n    pos += position;\n    gl_Position = uPMatrix * uMVMatrix * vec4(pos, 1.0);\n    vTextureCoord = aTextureCoord;\n}";
+ShaderLibs.shaders.generalNormalVert = "#define GLSLIFY 1\n\n#define SHADER_NAME GENERAL_VERTEX\n\nprecision highp float;\nattribute vec3 aVertexPosition;\nattribute vec3 aNormal;\nattribute vec2 aTextureCoord;\n\nuniform mat4 uMVMatrix;\nuniform mat4 uPMatrix;\nuniform vec3 position;\nuniform vec3 scale;\n\nvarying vec3 vVertex;\nvarying vec3 vNormal;\nvarying vec2 vTextureCoord;\n\nvoid main(void) {\n\tvec3 pos      = aVertexPosition;\n\tpos           *= scale;\n\tpos           += position;\n\tgl_Position   = uPMatrix * uMVMatrix * vec4(pos, 1.0);\n\tvTextureCoord = aTextureCoord;\n\t\n\tvNormal       = aNormal;\n\tvVertex       = pos;\n}";
+ShaderLibs.shaders.generalWithNormalVert = "#define GLSLIFY 1\n\n#define SHADER_NAME GENERAL_VERTEX\n\nprecision highp float;\nattribute vec3 aVertexPosition;\nattribute vec3 aNormal;\nattribute vec2 aTextureCoord;\n\nuniform mat4 uMVMatrix;\nuniform mat4 uPMatrix;\nuniform vec3 position;\nuniform vec3 scale;\n\nvarying vec3 vVertex;\nvarying vec3 vNormal;\nvarying vec2 vTextureCoord;\n\nvoid main(void) {\n\tvec3 pos      = aVertexPosition;\n\tpos           *= scale;\n\tpos           += position;\n\tgl_Position   = uPMatrix * uMVMatrix * vec4(pos, 1.0);\n\tvTextureCoord = aTextureCoord;\n\t\n\tvNormal       = aNormal;\n\tvVertex       = pos;\n}";
 
-ShaderLibs.shaders.copyFrag = "#define GLSLIFY 1\n\n#define SHADER_NAME SIMPLE_TEXTURE\n\nprecision highp float;\nvarying vec2 vTextureCoord;\nuniform sampler2D texture;\n\nvoid main(void) {\n    gl_FragColor = texture2D(texture, vTextureCoord);\n}";
+ShaderLibs.shaders.copyFrag = "#define GLSLIFY 1\n\n#define SHADER_NAME SIMPLE_TEXTURE\n\nprecision highp float;\nvarying vec2 vTextureCoord;\nuniform sampler2D texture;\n\nvoid main(void) {\n    gl_FragColor = texture2D(texture, vTextureCoord);\n}\n";
+
 
 ShaderLibs.shaders.alphaFrag = "#define GLSLIFY 1\n\n#define SHADER_NAME TEXTURE_WITH_ALPHA\n\nprecision highp float;\nvarying vec2 vTextureCoord;\nuniform sampler2D texture;\nuniform float opacity;\n\nvoid main(void) {\n    gl_FragColor = texture2D(texture, vTextureCoord);\n    gl_FragColor.a *= opacity;\n}";
 
 ShaderLibs.shaders.simpleColorFrag = "#define GLSLIFY 1\n\n#define SHADER_NAME SIMPLE_COLOR_FRAGMENT\n\nprecision highp float;\nuniform vec3 color;\nuniform float opacity;\n\nvoid main(void) {\n    gl_FragColor = vec4(color, opacity);\n}";
 
 ShaderLibs.shaders.depthFrag = "#define GLSLIFY 1\n\nprecision highp float;\nvarying vec2 vTextureCoord;\nuniform sampler2D texture;\nuniform float n;\nuniform float f;\n\nfloat getDepth(float z) {\n\treturn (6.0 * n) / (f + n - z*(f-n));\n}\n\nvoid main(void) {\n    float r = texture2D(texture, vTextureCoord).r;\n    float grey = getDepth(r);\n    gl_FragColor = vec4(grey, grey, grey, 1.0);\n}";
+
+ShaderLibs.shaders.simpleCopyLighting = "#define GLSLIFY 1\n\n#define SHADER_NAME SIMPLE_TEXTURE_LIGHTING\n\nprecision highp float;\n\nuniform vec3 ambient;\nuniform vec3 lightPosition;\nuniform vec3 lightColor;\nuniform float lightWeight;\n\nuniform sampler2D texture;\n\nvarying vec2 vTextureCoord;\nvarying vec3 vVertex;\nvarying vec3 vNormal;\n\nvoid main(void) {\n\tvec3 L        = normalize(lightPosition-vVertex);\n\tfloat lambert = max(dot(vNormal, L), .0);\n\tvec3 light    = ambient + lightColor * lambert * lightWeight;\n\tvec4 color \t  = texture2D(texture, vTextureCoord);\n\tcolor.rgb \t  *= light;\n\t\n\tgl_FragColor  = color;\n}";
+ShaderLibs.shaders.simpleColorLighting = "#define GLSLIFY 1\n\n// simpleColorLighting.frag\n\n#define SHADER_NAME SIMPLE_COLOR_LIGHTING\n\nprecision highp float;\n\nuniform vec3 ambient;\nuniform vec3 lightPosition;\nuniform vec3 lightColor;\nuniform float lightWeight;\n\nuniform vec3 color;\nuniform float opacity;\n\nvarying vec3 vVertex;\nvarying vec3 vNormal;\n\nvoid main(void) {\n\tvec3 L        = normalize(lightPosition-vVertex);\n\tfloat lambert = max(dot(vNormal, L), .0);\n\tvec3 light    = ambient + lightColor * lambert * lightWeight;\n\t\n\tgl_FragColor  = vec4(color * light, opacity);\n}";
+
 
 
 ShaderLibs.getShader = function(mId) {
@@ -12431,7 +13654,7 @@ ShaderLibs.getShader = function(mId) {
 
 ShaderLibs.get = ShaderLibs.getShader;
 module.exports = ShaderLibs;
-},{}],17:[function(_dereq_,module,exports){
+},{}],22:[function(_dereq_,module,exports){
 "use strict";
 
 var glm = _dereq_("gl-matrix");
@@ -12614,7 +13837,7 @@ p.__defineSetter__("ry", function(mValue) {
 });
 
 module.exports = SimpleCamera;
-},{"./CameraPerspective":4,"./EaseNumber":5,"gl-matrix":2}],18:[function(_dereq_,module,exports){
+},{"./CameraPerspective":6,"./EaseNumber":7,"gl-matrix":2}],23:[function(_dereq_,module,exports){
 "use strict";
 
 var SimpleImageLoader = function() {
@@ -12665,7 +13888,7 @@ p._onImageLoaded = function() {
 };
 
 module.exports = SimpleImageLoader;
-},{}],19:[function(_dereq_,module,exports){
+},{}],24:[function(_dereq_,module,exports){
 // View.js
 "use strict";
 
@@ -12689,7 +13912,7 @@ p.render = function() {
 module.exports = View;
 
 
-},{"./GLShader":8}],20:[function(_dereq_,module,exports){
+},{"./GLShader":12}],25:[function(_dereq_,module,exports){
 // ViewAxis.js
 
 "use strict";
@@ -12759,7 +13982,7 @@ p.render = function() {
 
 module.exports = ViewAxis;
 
-},{"./GLTools":10,"./Mesh":11,"./View":19}],21:[function(_dereq_,module,exports){
+},{"./GLTools":14,"./Mesh":15,"./View":24}],26:[function(_dereq_,module,exports){
 "use strict";
 
 var View = _dereq_("./View");
@@ -12788,7 +14011,7 @@ p.render = function(aTexture) {
 
 module.exports = ViewCopy;
 
-},{"./GLTools":10,"./MeshUtils":12,"./View":19}],22:[function(_dereq_,module,exports){
+},{"./GLTools":14,"./MeshUtils":16,"./View":24}],27:[function(_dereq_,module,exports){
 // ViewDotPlanes.js
 
 "use strict";
@@ -12852,7 +14075,112 @@ p.render = function() {
 
 module.exports = ViewDotPlanes;
 
-},{"./GLTools":10,"./Mesh":11,"./ShaderLibs":16,"./View":19}]},{},[1])(1)
+},{"./GLTools":14,"./Mesh":15,"./ShaderLibs":21,"./View":24}],28:[function(_dereq_,module,exports){
+"use strict";
+
+var Pass = _dereq_("./Pass");
+
+var EffectComposer = function() {
+	this._passes = [];
+};
+
+var p = EffectComposer.prototype = new Pass();
+
+
+p.addPass = function(pass) {
+	this._passes.push(pass);
+};
+
+
+p.render = function(texture) {
+	this.texture = texture;
+	for(var i=0; i<this._passes.length; i++) {
+		this.texture = this._passes[i].render(this.texture);
+	}
+
+	return this.texture;
+};
+
+p.getTexture = function() {
+	return this.texture;	
+};
+
+
+module.exports =EffectComposer;
+},{"./Pass":29}],29:[function(_dereq_,module,exports){
+"use strict";
+
+var gl,GL = _dereq_("../GLTools");
+var ViewCopy = _dereq_("../ViewCopy");
+var FrameBuffer = _dereq_("../FrameBuffer");
+
+var Pass = function(mParams, mWidth, mHeight, mFboParams) {
+	mWidth = mWidth === undefined ? 512 : mWidth;
+	mHeight = mHeight === undefined ? 512 : mHeight;
+	gl = GL.gl;
+	if(!mParams) {	return;	}
+	if( (typeof mParams) === "string") {
+		this.view = new ViewCopy(null, mParams);
+	} else {
+		this.view = mParams;
+	}
+
+	this.width = mWidth;
+	this.height = mHeight;
+	this._fboParams = mFboParams;
+
+	this._init();
+};
+
+var p = Pass.prototype;
+
+
+p._init = function() {
+	this._fbo = new FrameBuffer(this.width, this.height, this._fboParams);
+	this._fbo.bind();
+	GL.setViewport(0, 0, this._fbo.width, this._fbo.height);
+	GL.clear(0, 0, 0, 0);
+	this._fbo.unbind();
+	GL.setViewport(0, 0, GL.canvas.width, GL.canvas.height);
+
+};
+
+
+p.render = function(texture) {
+	this._fbo.bind();
+	GL.setViewport(0, 0, this._fbo.width, this._fbo.height);
+	GL.clear(0, 0, 0, 0);
+	this.view.render(texture);
+	this._fbo.unbind();
+	GL.setViewport(0, 0, GL.canvas.width, GL.canvas.height);
+
+	return this._fbo.getTexture();
+};
+
+p.getTexture = function() {
+	return this._fbo.getTexture();
+};
+
+p.getFbo = function() {
+	return this._fbo;
+};
+
+module.exports = Pass;
+},{"../FrameBuffer":10,"../GLTools":14,"../ViewCopy":26}],30:[function(_dereq_,module,exports){
+// PassGreyscale.js
+
+"use strict";
+var Pass = _dereq_("./Pass");
+
+
+var PassGreyscale = function(mWidth, mHeight, mFboParams) {
+	Pass.call(this, "#define GLSLIFY 1\n\n// greyscale.frag\n\n#define SHADER_NAME FRAGMENT_GREYSCALE\n\nprecision highp float;\n\nvarying vec2 vTextureCoord;\n\nuniform sampler2D texture;\n\nvoid main(void) {\n\tvec4 color = texture2D(texture, vTextureCoord);\n\tfloat grey = (color.r + color.g + color.b) / 3.0;\n\tgl_FragColor = vec4(vec3(grey), color.a);\n}", mWidth, mHeight, mFboParams);
+};
+
+PassGreyscale.prototype = new Pass();
+
+module.exports = PassGreyscale;
+},{"./Pass":29}]},{},[1])(1)
 });
 
 ;
@@ -15206,6 +16534,41 @@ if(typeof(exports) !== 'undefined') {
 },{}],3:[function(_dereq_,module,exports){
 "use strict";
 
+var GLTools = _dereq_("./bongiovi/GLTools");
+
+var bongiovi = {
+	GL:GLTools,
+	GLTools:GLTools,
+	Scheduler:_dereq_("./bongiovi/Scheduler"),
+	SimpleImageLoader:_dereq_("./bongiovi/SimpleImageLoader"),
+	EaseNumber:_dereq_("./bongiovi/EaseNumber"),
+	QuatRotation:_dereq_("./bongiovi/QuatRotation"),
+	Scene:_dereq_("./bongiovi/Scene"),
+	Camera:_dereq_("./bongiovi/Camera"),
+	SimpleCamera:_dereq_("./bongiovi/SimpleCamera"),
+	CameraOrtho:_dereq_("./bongiovi/CameraOrtho"),
+	CameraPerspective:_dereq_("./bongiovi/CameraPerspective"),
+	Mesh:_dereq_("./bongiovi/Mesh"),
+	Face:_dereq_("./bongiovi/Face"),
+	GLShader:_dereq_("./bongiovi/GLShader"),
+	GLTexture:_dereq_("./bongiovi/GLTexture"),
+	GLCubeTexture:_dereq_("./bongiovi/GLCubeTexture"),
+	ShaderLibs:_dereq_("./bongiovi/ShaderLibs"),
+	View:_dereq_("./bongiovi/View"),
+	ViewCopy:_dereq_("./bongiovi/ViewCopy"),
+	ViewAxis:_dereq_("./bongiovi/ViewAxis"),
+	ViewDotPlane:_dereq_("./bongiovi/ViewDotPlanes"),
+	MeshUtils:_dereq_("./bongiovi/MeshUtils"),
+	FrameBuffer:_dereq_("./bongiovi/FrameBuffer"),
+	EventDispatcher:_dereq_("./bongiovi/EventDispatcher"),
+	ObjLoader:_dereq_("./bongiovi/ObjLoader"),
+	glm:_dereq_("gl-matrix")
+};
+
+module.exports = bongiovi;
+},{"./bongiovi/Camera":4,"./bongiovi/CameraOrtho":5,"./bongiovi/CameraPerspective":6,"./bongiovi/EaseNumber":7,"./bongiovi/EventDispatcher":8,"./bongiovi/Face":9,"./bongiovi/FrameBuffer":10,"./bongiovi/GLCubeTexture":11,"./bongiovi/GLShader":12,"./bongiovi/GLTexture":13,"./bongiovi/GLTools":14,"./bongiovi/Mesh":15,"./bongiovi/MeshUtils":16,"./bongiovi/ObjLoader":17,"./bongiovi/QuatRotation":18,"./bongiovi/Scene":19,"./bongiovi/Scheduler":20,"./bongiovi/ShaderLibs":21,"./bongiovi/SimpleCamera":22,"./bongiovi/SimpleImageLoader":23,"./bongiovi/View":24,"./bongiovi/ViewAxis":25,"./bongiovi/ViewCopy":26,"./bongiovi/ViewDotPlanes":27,"gl-matrix":2}],4:[function(_dereq_,module,exports){
+"use strict";
+
 var glm = _dereq_("gl-matrix");
 
 var Camera = function() {
@@ -15228,7 +16591,52 @@ p.getMatrix = function() {
 };
 
 module.exports = Camera;
-},{"gl-matrix":2}],4:[function(_dereq_,module,exports){
+},{"gl-matrix":2}],5:[function(_dereq_,module,exports){
+// CameraOrtho.js
+
+"use strict";
+
+var Camera = _dereq_("./Camera");
+var glm = _dereq_("gl-matrix");
+
+
+var CameraOrtho = function() {
+	Camera.call(this);
+
+	var eye            = glm.vec3.clone([0, 0, 500]  );
+	var center         = glm.vec3.create( );
+	var up             = glm.vec3.clone( [0,-1,0] );
+	this.lookAt(eye, center, up);
+
+	this.projection = glm.mat4.create();
+};
+
+var p = CameraOrtho.prototype = new Camera();
+
+
+p.setBoundary = function(left, right, top, bottom) {
+	this.left = left;
+	this.right = right;
+	this.top = top;
+	this.bottom = bottom;
+	glm.mat4.ortho(this.projection, left, right, top, bottom, 0, 10000);
+};
+
+
+p.ortho = p.setBoundary;
+
+p.getMatrix = function() {
+	return this.matrix;
+};
+
+
+p.resize = function() {
+	glm.mat4.ortho(this.projection, this.left, this.right, this.top, this.bottom, 0, 10000);
+};
+
+
+module.exports = CameraOrtho;
+},{"./Camera":4,"gl-matrix":2}],6:[function(_dereq_,module,exports){
 // CameraPerspective.js
 "use strict";
 
@@ -15271,7 +16679,7 @@ p.__defineGetter__("far", function() {
 });
 
 module.exports = CameraPerspective;
-},{"./Camera":3,"gl-matrix":2}],5:[function(_dereq_,module,exports){
+},{"./Camera":4,"gl-matrix":2}],7:[function(_dereq_,module,exports){
 // EaseNumber.js
 
 "use strict";
@@ -15342,7 +16750,131 @@ p.__defineSetter__("value", function(mValue) {
 
 
 module.exports = EaseNumber;
-},{"./Scheduler":15}],6:[function(_dereq_,module,exports){
+},{"./Scheduler":20}],8:[function(_dereq_,module,exports){
+// EventDispatcher.js
+
+"use strict";
+
+var supportsCustomEvents = true;
+try {
+	var newTestCustomEvent = document.createEvent("CustomEvent");
+	newTestCustomEvent = null;
+} catch(e){
+	supportsCustomEvents = false;
+}
+
+function EventDispatcher() {
+	this._eventListeners = null;
+}
+
+
+var p = EventDispatcher.prototype;
+
+
+p.addEventListener = function(aEventType, aFunction) {
+
+	if(this._eventListeners === null) {
+		this._eventListeners = {};
+	}
+	if(!this._eventListeners[aEventType]){
+		this._eventListeners[aEventType] = [];
+	}
+	this._eventListeners[aEventType].push(aFunction);
+	
+	return this;
+};
+
+p.removeEventListener = function(aEventType, aFunction) {
+	if(this._eventListeners === null) {
+		this._eventListeners = {};
+	}
+	var currentArray = this._eventListeners[aEventType];
+	
+	if (typeof(currentArray) === "undefined") {
+		// console.warn("EventDispatcher :: removeEventListener :: Tried to remove an event handler (for " + aEventType +") that doesn't exist");
+		return this;
+	}
+	
+	var currentArrayLength = currentArray.length;
+	for(var i = 0; i < currentArrayLength; i++){
+		if(currentArray[i] === aFunction){
+			currentArray.splice(i, 1);
+			i--;
+			currentArrayLength--;
+		}
+	}
+	return this;
+};
+
+p.dispatchEvent = function(aEvent) {
+	if(this._eventListeners === null) {
+		this._eventListeners = {};
+	}
+	var eventType = aEvent.type;
+	
+	try {
+		if(aEvent.target === null) {
+			aEvent.target = this;
+		}
+		aEvent.currentTarget = this;
+	}
+	catch(theError) {
+		var newEvent = {"type" : eventType, "detail" : aEvent.detail, "dispatcher" : this };
+		return this.dispatchEvent(newEvent);
+	}
+	
+	var currentEventListeners = this._eventListeners[eventType];
+	if(currentEventListeners !== null && currentEventListeners !== undefined) {
+		var currentArray = this._copyArray(currentEventListeners);
+		var currentArrayLength = currentArray.length;
+		for(var i = 0; i < currentArrayLength; i++){
+			var currentFunction = currentArray[i];
+			currentFunction.call(this, aEvent);
+		}
+	}
+	return this;
+};
+
+p.dispatchCustomEvent = function(aEventType, aDetail) {
+	var newEvent;
+	if (supportsCustomEvents){
+		newEvent = document.createEvent("CustomEvent");
+		newEvent.dispatcher = this;
+		newEvent.initCustomEvent(aEventType, false, false, aDetail);
+	}
+	else {
+		newEvent = {"type" : aEventType, "detail" : aDetail, "dispatcher" : this };
+	}
+	return this.dispatchEvent(newEvent);
+};
+
+p._destroy = function() {
+	if(this._eventListeners !== null) {
+		for(var objectName in this._eventListeners) {
+			if(this._eventListeners.hasOwnProperty(objectName)) {
+				var currentArray = this._eventListeners[objectName];
+				var currentArrayLength = currentArray.length;
+				for(var i = 0; i < currentArrayLength; i++) {
+					currentArray[i] = null;
+				}
+				delete this._eventListeners[objectName];	
+			}
+		}
+		this._eventListeners = null;
+	}
+};
+
+p._copyArray = function(aArray) {
+	var currentArray = new Array(aArray.length);
+	var currentArrayLength = currentArray.length;
+	for(var i = 0; i < currentArrayLength; i++) {
+		currentArray[i] = aArray[i];
+	}
+	return currentArray;
+};
+
+module.exports = EventDispatcher;
+},{}],9:[function(_dereq_,module,exports){
 "use strict";
 
 var glm = _dereq_("gl-matrix");
@@ -15384,12 +16916,14 @@ var equal = function(mV0, mV1) {
 };
 
 module.exports = Face;
-},{"gl-matrix":2}],7:[function(_dereq_,module,exports){
+},{"gl-matrix":2}],10:[function(_dereq_,module,exports){
 "use strict";
 
 var gl, GL = _dereq_("./GLTools");
 var GLTexture = _dereq_("./GLTexture");
-var isPowerOfTwo = function(x) {	return !(x === 0) && !(x & (x - 1));	};
+var isPowerOfTwo = function(x) {	
+	return (x !== 0) && !(x & (x - 1));	
+};
 
 var FrameBuffer = function(width, height, options) {
 	gl = GL.gl;
@@ -15515,7 +17049,63 @@ p.destroy = function() {
 };
 
 module.exports = FrameBuffer;
-},{"./GLTexture":9,"./GLTools":10}],8:[function(_dereq_,module,exports){
+},{"./GLTexture":13,"./GLTools":14}],11:[function(_dereq_,module,exports){
+"use strict";
+
+var gl;
+var GL = _dereq_("./GLTools");
+
+var GLCubeTexture = function(sources, options) {
+	// [posx, negx, posy, negy, posz, negz]
+	options = options || {};
+	gl = GL.gl;
+	this.texture = gl.createTexture();
+	
+	this.magFilter = options.magFilter || gl.LINEAR;
+	this.minFilter = options.minFilter || gl.LINEAR_MIPMAP_NEAREST;
+	this.wrapS     = options.wrapS || gl.CLAMP_TO_EDGE;
+	this.wrapT     = options.wrapT || gl.CLAMP_TO_EDGE;
+
+	gl.bindTexture(gl.TEXTURE_CUBE_MAP, this.texture);
+	var targets = [
+		gl.TEXTURE_CUBE_MAP_POSITIVE_X, gl.TEXTURE_CUBE_MAP_NEGATIVE_X, 
+		gl.TEXTURE_CUBE_MAP_POSITIVE_Y, gl.TEXTURE_CUBE_MAP_NEGATIVE_Y, 
+		gl.TEXTURE_CUBE_MAP_POSITIVE_Z, gl.TEXTURE_CUBE_MAP_NEGATIVE_Z 
+	];
+
+	for (var j = 0; j < 6; j++) {
+	    gl.texImage2D(targets[j], 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, sources[j]);
+	    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_S, this.wrapS);
+	    gl.texParameteri(gl.TEXTURE_CUBE_MAP, gl.TEXTURE_WRAP_T, this.wrapT);
+	}
+	gl.generateMipmap(gl.TEXTURE_CUBE_MAP);
+
+	gl.bindTexture(gl.TEXTURE_CUBE_MAP, null);
+};
+
+var p = GLCubeTexture.prototype;
+
+
+p.bind = function(index) {
+	if(index === undefined) {index = 0;}
+	if(!GL.shader) {return;}
+
+	gl.bindTexture(gl.TEXTURE_CUBE_MAP, this.texture);
+	gl.uniform1i(GL.shader.uniformTextures[index], index);
+	this._bindIndex = index;
+};
+
+
+p.unbind = function() {
+	gl.bindTexture(gl.TEXTURE_CUBE_MAP, null);	
+};
+
+p.destroy = function() {
+	gl.deleteTexture(this.texture);
+};
+
+module.exports = GLCubeTexture;
+},{"./GLTools":14}],12:[function(_dereq_,module,exports){
 "use strict";
 
 var GL = _dereq_("./GLTools");
@@ -15649,6 +17239,8 @@ p.bind = function() {
 
 	if(this.shaderProgram.pMatrixUniform === undefined) {	this.shaderProgram.pMatrixUniform = gl.getUniformLocation(this.shaderProgram, "uPMatrix");}
 	if(this.shaderProgram.mvMatrixUniform === undefined) {	this.shaderProgram.mvMatrixUniform = gl.getUniformLocation(this.shaderProgram, "uMVMatrix");}
+	if(this.shaderProgram.normalMatrixUniform === undefined) {	this.shaderProgram.normalMatrixUniform = gl.getUniformLocation(this.shaderProgram, "normalMatrix");}
+	if(this.shaderProgram.invertMVMatrixUniform === undefined) {	this.shaderProgram.invertMVMatrixUniform = gl.getUniformLocation(this.shaderProgram, "invertMVMatrix");}
 
 	GL.setShader(this);
 	GL.setShaderProgram(this.shaderProgram);
@@ -15774,14 +17366,14 @@ p.destroy = function() {
 };
 
 module.exports = GLShader;
-},{"./GLTools":10,"./ShaderLibs":16}],9:[function(_dereq_,module,exports){
+},{"./GLTools":14,"./ShaderLibs":21}],13:[function(_dereq_,module,exports){
 // GLTexture.js
 "use strict";
 
 var gl;
 var GL = _dereq_("./GLTools");
 var _isPowerOfTwo = function(x) {	
-	var check = !(x === 0) && (!(x & (x - 1)));
+	var check = (x !== 0) && (!(x & (x - 1)));
 	return check;
 };
 var isPowerOfTwo = function(obj) {	
@@ -15879,7 +17471,7 @@ p.destroy = function() {
 };
 
 module.exports = GLTexture;
-},{"./GLTools":10}],10:[function(_dereq_,module,exports){
+},{"./GLTools":14}],14:[function(_dereq_,module,exports){
 // GLTools.js
 "use strict";
 
@@ -15927,6 +17519,7 @@ p.init = function(mCanvas, mWidth, mHeight, parameters) {
 	this.matrix                 = glm.mat4.create();
 	glm.mat4.identity(this.matrix);
 	this.normalMatrix           = glm.mat3.create();
+	this.invertMVMatrix         = glm.mat3.create();
 	this.depthTextureExt        = this.gl.getExtension("WEBKIT_WEBGL_depth_texture"); // Or browser-appropriate prefix
 	this.floatTextureExt        = this.gl.getExtension("OES_texture_float"); // Or browser-appropriate prefix
 	this.floatTextureLinearExt  = this.gl.getExtension("OES_texture_float_linear"); // Or browser-appropriate prefix
@@ -15972,6 +17565,9 @@ p.rotate = function(aRotation) {
 	glm.mat3.fromMat4(this.normalMatrix, this.matrix);
 	glm.mat3.invert(this.normalMatrix, this.normalMatrix);
 	glm.mat3.transpose(this.normalMatrix, this.normalMatrix);
+
+	glm.mat3.fromMat4(this.invertMVMatrix, this.matrix);
+	glm.mat3.invert(this.invertMVMatrix, this.invertMVMatrix);
 };
 
 
@@ -15997,6 +17593,7 @@ p.draw = function(aMesh) {
 		return;
 	}
 
+	//	PROJECTION MATRIX
 	if(!this.shaderProgram.pMatrixValue) {
 		this.shaderProgram.pMatrixValue = glm.mat4.create();
 		this.gl.uniformMatrix4fv(this.shaderProgram.pMatrixUniform, false, this.camera.projection || this.camera.getMatrix() );
@@ -16009,6 +17606,7 @@ p.draw = function(aMesh) {
 		}
 	}
 
+	//	MODEL-VIEW MATRIX
 	if(!this.shaderProgram.mvMatrixValue) {
 		this.shaderProgram.mvMatrixValue = glm.mat4.create();
 		this.gl.uniformMatrix4fv(this.shaderProgram.mvMatrixUniform, false, this.matrix );
@@ -16019,6 +17617,32 @@ p.draw = function(aMesh) {
 			glm.mat4.copy(this.shaderProgram.mvMatrixValue, this.matrix);
 		}
 	}
+	
+	
+    //	INVERT MODEL-VIEW MATRIX
+	if(!this.shaderProgram.invertMVMatrixValue) {
+		this.shaderProgram.invertMVMatrixValue = glm.mat3.create();
+		this.gl.uniformMatrix3fv(this.shaderProgram.invertMVMatrixUniform, false, this.invertMVMatrix );
+		glm.mat3.copy(this.shaderProgram.invertMVMatrixValue, this.invertMVMatrix);
+	} else {
+		if(glm.mat3.str(this.shaderProgram.invertMVMatrixValue) !== glm.mat3.str(this.invertMVMatrix)) {
+			this.gl.uniformMatrix3fv(this.shaderProgram.invertMVMatrixUniform, false, this.invertMVMatrix );
+			glm.mat3.copy(this.shaderProgram.invertMVMatrixValue, this.invertMVMatrix);
+		}
+	}
+
+	//	NORMAL MATRIX
+	if(!this.shaderProgram.normalMatrixValue) {
+		this.shaderProgram.normalMatrixValue = glm.mat4.create();
+		this.gl.uniformMatrix3fv(this.shaderProgram.normalMatrixUniform, false, this.normalMatrix );
+		glm.mat3.copy(this.shaderProgram.normalMatrixValue, this.normalMatrix);
+	} else {
+		if(glm.mat3.str(this.shaderProgram.normalMatrixValue) !== glm.mat3.str(this.normalMatrix)) {
+			this.gl.uniformMatrix3fv(this.shaderProgram.normalMatrixUniform, false, this.normalMatrix );
+			glm.mat3.copy(this.shaderProgram.normalMatrixValue, this.normalMatrix);
+		}
+	}
+
 
 
 	// 	VERTEX POSITIONS
@@ -16113,7 +17737,7 @@ GLTools.getInstance = function() {
 
 
 module.exports = GLTools.getInstance();
-},{"gl-matrix":2}],11:[function(_dereq_,module,exports){
+},{"gl-matrix":2}],15:[function(_dereq_,module,exports){
 "use strict";
 
 var Face = _dereq_("./Face");
@@ -16287,33 +17911,64 @@ p._generateFaces = function() {
 };
 
 module.exports = Mesh;
-},{"./Face":6,"./GLTools":10,"gl-matrix":2}],12:[function(_dereq_,module,exports){
+},{"./Face":9,"./GLTools":14,"gl-matrix":2}],16:[function(_dereq_,module,exports){
 "use strict";
 
 var GL = _dereq_("./GLTools");
 var Mesh = _dereq_("./Mesh");
 var MeshUtils = {};
 
-MeshUtils.createPlane = function(width, height, numSegments) {
+MeshUtils.createPlane = function(width, height, numSegments, withNormals, axis) {
+	axis          = axis === undefined ? "xy" : axis;
+	withNormals   = withNormals === undefined ? false : withNormals;
 	var positions = [];
-	var coords = [];
-	var indices = [];
+	var coords    = [];
+	var indices   = [];
+	var normals   = [];
 
-	var gapX = width/numSegments;
-	var gapY = height/numSegments;
+	var gapX  = width/numSegments;
+	var gapY  = height/numSegments;
 	var gapUV = 1/numSegments;
 	var index = 0;
-	var sx = -width * 0.5;
-	var sy = -height * 0.5;
+	var sx    = -width * 0.5;
+	var sy    = -height * 0.5;
 
 	for(var i=0; i<numSegments; i++) {
 		for (var j=0; j<numSegments; j++) {
 			var tx = gapX * i + sx;
 			var ty = gapY * j + sy;
-			positions.push([tx, 		ty, 	0]);
-			positions.push([tx+gapX, 	ty, 	0]);
-			positions.push([tx+gapX, 	ty+gapY, 	0]);
-			positions.push([tx, 		ty+gapY, 	0]);
+
+			if(axis === 'xz') {
+				positions.push([tx, 		0, 	ty+gapY	]);
+				positions.push([tx+gapX, 	0, 	ty+gapY	]);
+				positions.push([tx+gapX, 	0, 	ty	]);
+				positions.push([tx, 		0, 	ty	]);	
+
+				normals.push([0, 1, 0]);
+				normals.push([0, 1, 0]);
+				normals.push([0, 1, 0]);
+				normals.push([0, 1, 0]);
+			} else if(axis === 'yz') {
+				positions.push([0, tx, 		ty]);
+				positions.push([0, tx+gapX, ty]);
+				positions.push([0, tx+gapX, ty+gapY]);
+				positions.push([0, tx, 		ty+gapY]);	
+
+				normals.push([1, 0, 0]);
+				normals.push([1, 0, 0]);
+				normals.push([1, 0, 0]);
+				normals.push([1, 0, 0]);
+			} else {
+				positions.push([tx, 		ty, 	0]);
+				positions.push([tx+gapX, 	ty, 	0]);
+				positions.push([tx+gapX, 	ty+gapY, 	0]);
+				positions.push([tx, 		ty+gapY, 	0]);	
+
+				normals.push([0, 0, 1]);
+				normals.push([0, 0, 1]);
+				normals.push([0, 0, 1]);
+				normals.push([0, 0, 1]);
+			} 
 
 			var u = i/numSegments;
 			var v = j/numSegments;
@@ -16337,21 +17992,27 @@ MeshUtils.createPlane = function(width, height, numSegments) {
 	mesh.bufferVertex(positions);
 	mesh.bufferTexCoords(coords);
 	mesh.bufferIndices(indices);
+	if(withNormals) {
+		mesh.bufferData(normals, "aNormal", 3);
+	}
 
 	return mesh;
 };
 
-MeshUtils.createSphere = function(size, numSegments) {
+MeshUtils.createSphere = function(size, numSegments, withNormals) {
+	withNormals   = withNormals === undefined ? false : withNormals;
 	var positions = [];
-	var coords = [];
-	var indices = [];
-	var index = 0;
-	var gapUV = 1/numSegments;
+	var coords    = [];
+	var indices   = [];
+	var normals   = [];
+	var index     = 0;
+	var gapUV     = 1/numSegments;
 
-	var getPosition = function(i, j) {	//	rx : -90 ~ 90 , ry : 0 ~ 360
+	var getPosition = function(i, j, isNormal) {	//	rx : -90 ~ 90 , ry : 0 ~ 360
+		isNormal = isNormal === undefined ? false : isNormal;
 		var rx = i/numSegments * Math.PI - Math.PI * 0.5;
 		var ry = j/numSegments * Math.PI * 2;
-		var r = size;
+		var r = isNormal ? 1 : size;
 		var pos = [];
 		pos[1] = Math.sin(rx) * r;
 		var t = Math.cos(rx) * r;
@@ -16373,6 +18034,14 @@ MeshUtils.createSphere = function(size, numSegments) {
 			positions.push(getPosition(i+1, j));
 			positions.push(getPosition(i+1, j+1));
 			positions.push(getPosition(i, j+1));
+
+			if(withNormals) {
+				normals.push(getPosition(i, j, true));
+				normals.push(getPosition(i+1, j, true));
+				normals.push(getPosition(i+1, j+1, true));
+				normals.push(getPosition(i, j+1, true));	
+			}
+			
 
 			var u = j/numSegments;
 			var v = i/numSegments;
@@ -16399,13 +18068,649 @@ MeshUtils.createSphere = function(size, numSegments) {
 	mesh.bufferVertex(positions);
 	mesh.bufferTexCoords(coords);
 	mesh.bufferIndices(indices);
+	console.log('With normals :', withNormals);
+	if(withNormals) {
+		mesh.bufferData(normals, "aNormal", 3);
+	}
 
 	return mesh;
 };
 
+MeshUtils.createCube = function(w,h,d, withNormals) {
+	withNormals   = withNormals === undefined ? false : withNormals;
+	h = h || w;
+	d = d || w;
+
+	var x = w/2;
+	var y = h/2;
+	var z = d/2;
+
+	var positions = [];
+	var coords    = [];
+	var indices   = []; 
+	var normals   = []; 
+	var count     = 0;
+
+
+	// BACK
+	positions.push([-x,  y, -z]);
+	positions.push([ x,  y, -z]);
+	positions.push([ x, -y, -z]);
+	positions.push([-x, -y, -z]);
+
+	normals.push([0, 0, -1]);
+	normals.push([0, 0, -1]);
+	normals.push([0, 0, -1]);
+	normals.push([0, 0, -1]);
+
+	coords.push([0, 0]);
+	coords.push([1, 0]);
+	coords.push([1, 1]);
+	coords.push([0, 1]);
+
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 1);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 3);
+
+	count ++;
+
+	// RIGHT
+	positions.push([ x,  y, -z]);
+	positions.push([ x,  y,  z]);
+	positions.push([ x, -y,  z]);
+	positions.push([ x, -y, -z]);
+
+	normals.push([1, 0, 0]);
+	normals.push([1, 0, 0]);
+	normals.push([1, 0, 0]);
+	normals.push([1, 0, 0]);
+
+	coords.push([0, 0]);
+	coords.push([1, 0]);
+	coords.push([1, 1]);
+	coords.push([0, 1]);
+
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 1);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 3);
+
+	count ++;
+
+	// FRONT
+	positions.push([ x,  y,  z]);
+	positions.push([-x,  y,  z]);
+	positions.push([-x, -y,  z]);
+	positions.push([ x, -y,  z]);
+
+	normals.push([0, 0, 1]);
+	normals.push([0, 0, 1]);
+	normals.push([0, 0, 1]);
+	normals.push([0, 0, 1]);
+
+	coords.push([0, 0]);
+	coords.push([1, 0]);
+	coords.push([1, 1]);
+	coords.push([0, 1]);
+
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 1);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 3);
+
+	count ++;
+
+
+	// LEFT
+	positions.push([-x,  y,  z]);
+	positions.push([-x,  y, -z]);
+	positions.push([-x, -y, -z]);
+	positions.push([-x, -y,  z]);
+
+	normals.push([-1, 0, 0]);
+	normals.push([-1, 0, 0]);
+	normals.push([-1, 0, 0]);
+	normals.push([-1, 0, 0]);
+
+	coords.push([0, 0]);
+	coords.push([1, 0]);
+	coords.push([1, 1]);
+	coords.push([0, 1]);
+
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 1);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 3);
+
+	count ++;
+
+	// TOP
+	positions.push([-x,  y,  z]);
+	positions.push([ x,  y,  z]);
+	positions.push([ x,  y, -z]);
+	positions.push([-x,  y, -z]);
+
+	normals.push([0, 1, 0]);
+	normals.push([0, 1, 0]);
+	normals.push([0, 1, 0]);
+	normals.push([0, 1, 0]);
+
+	coords.push([0, 0]);
+	coords.push([1, 0]);
+	coords.push([1, 1]);
+	coords.push([0, 1]);
+
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 1);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 3);
+
+	count ++;
+
+	// BOTTOM
+	positions.push([-x, -y, -z]);
+	positions.push([ x, -y, -z]);
+	positions.push([ x, -y,  z]);
+	positions.push([-x, -y,  z]);
+
+	normals.push([0, -1, 0]);
+	normals.push([0, -1, 0]);
+	normals.push([0, -1, 0]);
+	normals.push([0, -1, 0]);
+
+	coords.push([0, 0]);
+	coords.push([1, 0]);
+	coords.push([1, 1]);
+	coords.push([0, 1]);
+
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 1);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 3);
+
+	count ++;
+
+
+	var mesh = new Mesh(positions.length, indices.length, GL.gl.TRIANGLES);
+	mesh.bufferVertex(positions);
+	mesh.bufferTexCoords(coords);
+	mesh.bufferIndices(indices);
+	if(withNormals) {
+		mesh.bufferData(normals, "aNormal", 3);
+	}
+
+	return mesh;
+};
+
+MeshUtils.createSkyBox = function(size, withNormals) {
+	withNormals   = withNormals === undefined ? false : withNormals;
+
+	var positions = [];
+	var coords    = [];
+	var indices   = []; 
+	var normals   = []; 
+	var count     = 0;
+
+	// BACK
+	positions.push([ size,  size, -size]);
+	positions.push([-size,  size, -size]);
+	positions.push([-size, -size, -size]);
+	positions.push([ size, -size, -size]);
+
+	normals.push([0, 0, -1]);
+	normals.push([0, 0, -1]);
+	normals.push([0, 0, -1]);
+	normals.push([0, 0, -1]);
+
+	coords.push([0, 0]);
+	coords.push([1, 0]);
+	coords.push([1, 1]);
+	coords.push([0, 1]);
+
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 1);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 3);
+
+	count ++;
+
+	// RIGHT
+	positions.push([ size, -size, -size]);
+	positions.push([ size, -size,  size]);
+	positions.push([ size,  size,  size]);
+	positions.push([ size,  size, -size]);
+
+	normals.push([1, 0, 0]);
+	normals.push([1, 0, 0]);
+	normals.push([1, 0, 0]);
+	normals.push([1, 0, 0]);
+
+	coords.push([0, 0]);
+	coords.push([1, 0]);
+	coords.push([1, 1]);
+	coords.push([0, 1]);
+
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 1);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 3);
+
+	count ++;
+
+	// FRONT
+	positions.push([-size,  size,  size]);
+	positions.push([ size,  size,  size]);
+	positions.push([ size, -size,  size]);
+	positions.push([-size, -size,  size]);
+
+	normals.push([0, 0, 1]);
+	normals.push([0, 0, 1]);
+	normals.push([0, 0, 1]);
+	normals.push([0, 0, 1]);
+
+	coords.push([0, 0]);
+	coords.push([1, 0]);
+	coords.push([1, 1]);
+	coords.push([0, 1]);
+
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 1);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 3);
+
+	count ++;
+
+	// LEFT
+	positions.push([-size, -size,  size]);
+	positions.push([-size, -size, -size]);
+	positions.push([-size,  size, -size]);
+	positions.push([-size,  size,  size]);
+
+	normals.push([-1, 0, 0]);
+	normals.push([-1, 0, 0]);
+	normals.push([-1, 0, 0]);
+	normals.push([-1, 0, 0]);
+
+	coords.push([0, 0]);
+	coords.push([1, 0]);
+	coords.push([1, 1]);
+	coords.push([0, 1]);
+
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 1);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 3);
+
+	count ++;
+
+	// TOP
+	positions.push([ size,  size,  size]);
+	positions.push([-size,  size,  size]);
+	positions.push([-size,  size, -size]);
+	positions.push([ size,  size, -size]);
+
+	normals.push([0, 1, 0]);
+	normals.push([0, 1, 0]);
+	normals.push([0, 1, 0]);
+	normals.push([0, 1, 0]);
+
+	coords.push([0, 0]);
+	coords.push([1, 0]);
+	coords.push([1, 1]);
+	coords.push([0, 1]);
+
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 1);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 3);
+
+	count ++;
+
+	// BOTTOM
+	positions.push([ size, -size, -size]);
+	positions.push([-size, -size, -size]);
+	positions.push([-size, -size,  size]);
+	positions.push([ size, -size,  size]);
+
+	normals.push([0, -1, 0]);
+	normals.push([0, -1, 0]);
+	normals.push([0, -1, 0]);
+	normals.push([0, -1, 0]);
+
+	coords.push([0, 0]);
+	coords.push([1, 0]);
+	coords.push([1, 1]);
+	coords.push([0, 1]);
+
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 1);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 0);
+	indices.push(count*4 + 2);
+	indices.push(count*4 + 3);
+
+	var mesh = new Mesh(positions.length, indices.length, GL.gl.TRIANGLES);
+	mesh.bufferVertex(positions);
+	mesh.bufferTexCoords(coords);
+	mesh.bufferIndices(indices);
+	if(withNormals) {
+		mesh.bufferData(normals, "aNormal", 3);
+	}
+
+	return mesh;
+};
 
 module.exports = MeshUtils;
-},{"./GLTools":10,"./Mesh":11}],13:[function(_dereq_,module,exports){
+},{"./GLTools":14,"./Mesh":15}],17:[function(_dereq_,module,exports){
+// ObjLoader.js
+
+"use strict";
+
+var GL = _dereq_("./GLTools");
+var Mesh = _dereq_("./Mesh");
+var gl;
+
+
+function ObjLoader() {
+	this._clearAll();
+}
+
+
+var p = ObjLoader.prototype;
+
+p._clearAll = function() {
+	this._callback      = null;
+	this._callbackError = null;
+	this._mesh          = [];	
+	this._drawingType 	= "";
+};
+
+p.load = function(url, callback, callbackError, ignoreNormals, drawingType) {
+	this._clearAll();
+	if(!gl) {	gl = GL.gl;	}
+	this._drawingType = drawingType === undefined ? gl.TRIANGLES : drawingType;
+	this._ignoreNormals = ignoreNormals === undefined ? true : ignoreNormals;
+
+	this._callback = callback;
+	this._callbackError = callbackError;
+
+	var request = new XMLHttpRequest();
+	request.onreadystatechange = this._onXHTPState.bind(this);
+	request.open("GET", url, true);
+	request.send();
+};
+
+p._onXHTPState = function(e) {
+	if(e.target.readyState === 4) {
+		this._parseObj(e.target.response);
+	}
+};
+
+
+p.parse = function(objStr, callback, callbackError, ignoreNormals, drawingType) {
+	this._clearAll();
+	this._drawingType = drawingType === undefined ? gl.TRIANGLES : drawingType;
+	this._ignoreNormals = ignoreNormals === undefined ? true : ignoreNormals;
+
+	this._parseObj(objStr);
+};
+
+
+p._parseObj = function(objStr) {
+	var lines = objStr.split('\n');
+
+	var positions    = [];
+	var coords       = [];
+	var finalNormals = [];
+	var vertices     = [];
+	var normals      = [];
+	var uvs          = [];
+	var indices      = [];
+	var count        = 0;
+	var result;
+
+	// v float float float
+	var vertex_pattern = /v( +[\d|\.|\+|\-|e|E]+)( +[\d|\.|\+|\-|e|E]+)( +[\d|\.|\+|\-|e|E]+)/;
+
+	// vn float float float
+	var normal_pattern = /vn( +[\d|\.|\+|\-|e|E]+)( +[\d|\.|\+|\-|e|E]+)( +[\d|\.|\+|\-|e|E]+)/;
+
+	// vt float float
+	var uv_pattern = /vt( +[\d|\.|\+|\-|e|E]+)( +[\d|\.|\+|\-|e|E]+)/;
+
+	// f vertex vertex vertex ...
+	var face_pattern1 = /f( +-?\d+)( +-?\d+)( +-?\d+)( +-?\d+)?/;
+
+	// f vertex/uv vertex/uv vertex/uv ...
+	var face_pattern2 = /f( +(-?\d+)\/(-?\d+))( +(-?\d+)\/(-?\d+))( +(-?\d+)\/(-?\d+))( +(-?\d+)\/(-?\d+))?/;
+
+	// f vertex/uv/normal vertex/uv/normal vertex/uv/normal ...
+	var face_pattern3 = /f( +(-?\d+)\/(-?\d+)\/(-?\d+))( +(-?\d+)\/(-?\d+)\/(-?\d+))( +(-?\d+)\/(-?\d+)\/(-?\d+))( +(-?\d+)\/(-?\d+)\/(-?\d+))?/;
+
+	// f vertex//normal vertex//normal vertex//normal ... 
+	var face_pattern4 = /f( +(-?\d+)\/\/(-?\d+))( +(-?\d+)\/\/(-?\d+))( +(-?\d+)\/\/(-?\d+))( +(-?\d+)\/\/(-?\d+))?/;
+
+
+	function parseVertexIndex( value ) {
+		var index = parseInt( value );
+		return ( index >= 0 ? index - 1 : index + vertices.length / 3 ) * 3;
+	}
+
+	function parseNormalIndex( value ) {
+		var index = parseInt( value );
+		return ( index >= 0 ? index - 1 : index + normals.length / 3 ) * 3;
+	}
+
+	function parseUVIndex( value ) {
+		var index = parseInt( value );
+		return ( index >= 0 ? index - 1 : index + uvs.length / 2 ) * 2;
+	}
+
+
+	function addVertex(a, b ,c) {
+		positions.push([vertices[a], vertices[a+1], vertices[a+2]]);
+		positions.push([vertices[b], vertices[b+1], vertices[b+2]]);
+		positions.push([vertices[c], vertices[c+1], vertices[c+2]]);
+
+		indices.push(count * 3 + 0);
+		indices.push(count * 3 + 1);
+		indices.push(count * 3 + 2);
+
+		count ++;
+	}
+
+
+	function addUV(a, b, c) {
+		coords.push([uvs[a], uvs[a+1]]);
+		coords.push([uvs[b], uvs[b+1]]);
+		coords.push([uvs[c], uvs[c+1]]);
+	}
+
+
+	function addNormal(a, b, c) {
+		finalNormals.push([normals[a], normals[a+1], normals[a+2]]);
+		finalNormals.push([normals[b], normals[b+1], normals[b+2]]);
+		finalNormals.push([normals[c], normals[c+1], normals[c+2]]);
+	}
+
+	function addFace( a, b, c, d,  ua, ub, uc, ud,  na, nb, nc, nd ) {
+		var ia = parseVertexIndex( a );
+		var ib = parseVertexIndex( b );
+		var ic = parseVertexIndex( c );
+		var id;
+
+		if ( d === undefined ) {
+
+			addVertex( ia, ib, ic );
+
+		} else {
+
+			id = parseVertexIndex( d );
+
+			addVertex( ia, ib, id );
+			addVertex( ib, ic, id );
+
+		}
+
+
+		if ( ua !== undefined ) {
+
+			ia = parseUVIndex( ua );
+			ib = parseUVIndex( ub );
+			ic = parseUVIndex( uc );
+
+			if ( d === undefined ) {
+
+				addUV( ia, ib, ic );
+
+			} else {
+
+				id = parseUVIndex( ud );
+
+				addUV( ia, ib, id );
+				addUV( ib, ic, id );
+
+			}
+
+		}
+
+		if ( na !== undefined ) {
+
+			ia = parseNormalIndex( na );
+			ib = parseNormalIndex( nb );
+			ic = parseNormalIndex( nc );
+
+			if ( d === undefined ) {
+
+				addNormal( ia, ib, ic );
+
+			} else {
+
+				id = parseNormalIndex( nd );
+
+				addNormal( ia, ib, id );
+				addNormal( ib, ic, id );
+
+			}
+
+		}
+	}
+
+
+	for ( var i = 0; i < lines.length; i ++ ) {
+		var line = lines[ i ];
+		line = line.trim();
+
+		if ( line.length === 0 || line.charAt( 0 ) === '#' ) {
+
+			continue;
+
+		} else if ( ( result = vertex_pattern.exec( line ) ) !== null ) {
+
+			vertices.push(
+				parseFloat( result[ 1 ] ),
+				parseFloat( result[ 2 ] ),
+				parseFloat( result[ 3 ] )
+			);
+
+		} else if ( ( result = normal_pattern.exec( line ) ) !== null ) {
+
+			normals.push(
+				parseFloat( result[ 1 ] ),
+				parseFloat( result[ 2 ] ),
+				parseFloat( result[ 3 ] )
+			);
+
+		} else if ( ( result = uv_pattern.exec( line ) ) !== null ) {
+
+			uvs.push(
+				parseFloat( result[ 1 ] ),
+				parseFloat( result[ 2 ] )
+			);
+
+		} else if ( ( result = face_pattern1.exec( line ) ) !== null ) {
+
+			addFace(
+				result[ 1 ], result[ 2 ], result[ 3 ], result[ 4 ]
+			);
+
+		} else if ( ( result = face_pattern2.exec( line ) ) !== null ) {
+
+			addFace(
+				result[ 2 ], result[ 5 ], result[ 8 ], result[ 11 ],
+				result[ 3 ], result[ 6 ], result[ 9 ], result[ 12 ]
+			);
+
+		} else if ( ( result = face_pattern3.exec( line ) ) !== null ) {
+			addFace(
+				result[ 2 ], result[ 6 ], result[ 10 ], result[ 14 ],
+				result[ 3 ], result[ 7 ], result[ 11 ], result[ 15 ],
+				result[ 4 ], result[ 8 ], result[ 12 ], result[ 16 ]
+			);
+
+		} else if ( ( result = face_pattern4.exec( line ) ) !== null ) {
+			addFace(
+				result[ 2 ], result[ 5 ], result[ 8 ], result[ 11 ],
+				undefined, undefined, undefined, undefined,
+				result[ 3 ], result[ 6 ], result[ 9 ], result[ 12 ]
+			);
+
+		} 
+	}
+
+	this._generateMeshes({	
+		positions:positions,
+		coords:coords,
+		normals:finalNormals,
+		indices:indices
+	});
+	
+};
+
+
+p._generateMeshes = function(o) {
+	gl = GL.gl;
+
+	var mesh = new Mesh(o.positions.length, o.indices.length, this._drawingType);
+	mesh.bufferVertex(o.positions);
+	mesh.bufferTexCoords(o.coords);
+	mesh.bufferIndices(o.indices);
+	if(!this._ignoreNormals) {
+		mesh.bufferData(o.normals, "aNormal", 3);
+	}
+
+	if(this._callback) {
+		this._callback(mesh, o);
+	}
+};
+
+// var loader = new ObjLoader();
+
+module.exports = ObjLoader;
+},{"./GLTools":14,"./Mesh":15}],18:[function(_dereq_,module,exports){
 "use strict";
 
 var glm = _dereq_("gl-matrix");
@@ -16598,12 +18903,12 @@ p._updateRotation = function(aTempRotation) {
 
 
 module.exports = QuatRotation;
-},{"gl-matrix":2}],14:[function(_dereq_,module,exports){
+},{"gl-matrix":2}],19:[function(_dereq_,module,exports){
 "use strict";
 
 var GL = _dereq_("./GLTools");
 var QuatRotation = _dereq_("./QuatRotation");
-var Camera = _dereq_("./Camera");
+var CameraOrtho = _dereq_("./CameraOrtho");
 var SimpleCamera = _dereq_("./SimpleCamera");
 var glm = _dereq_("gl-matrix");
 
@@ -16621,16 +18926,24 @@ p._init = function() {
 	this.camera.setPerspective(45*Math.PI/180, GL.aspectRatio, 5, 3000);
 	this.camera.lockRotation();
 
-	var eye            = glm.vec3.clone([0, 0, 500]  );
-	var center         = glm.vec3.create( );
-	var up             = glm.vec3.clone( [0,-1,0] );
+	var eye                = glm.vec3.clone([0, 0, 500]  );
+	var center             = glm.vec3.create( );
+	var up                 = glm.vec3.clone( [0,-1,0] );
 	this.camera.lookAt(eye, center, up);
 	
-	this.sceneRotation = new QuatRotation(GL.canvas);
-	this.rotationFront = glm.mat4.create();
+	this.sceneRotation     = new QuatRotation(GL.canvas);
+	this.rotationFront     = glm.mat4.create();
 	glm.mat4.identity(this.rotationFront);
 	
-	this.cameraOtho    = new Camera();
+	this.cameraOrtho       = new CameraOrtho();
+	this.cameraOrthoScreen = new CameraOrtho();
+	this.cameraOtho        = this.cameraOrtho;
+
+	this.cameraOrtho.lookAt(eye, center, up);
+	this.cameraOrtho.ortho( 1, -1, 1, -1);
+
+	this.cameraOrthoScreen.lookAt(eye, center, up);
+	this.cameraOrthoScreen.ortho( 0, GL.width, GL.height, 0);
 
 	// In SuperClass should call following functions.
 	this._initTextures();
@@ -16662,9 +18975,9 @@ p.update = function() {
 };
 
 p.resize = function() {
-	if(this.camera.resize) {
-		this.camera.resize(GL.aspectRatio);
-	}
+	// if(this.camera.resize) {
+	// 	this.camera.resize(GL.aspectRatio);
+	// }
 };
 
 p.render = function() {
@@ -16672,10 +18985,11 @@ p.render = function() {
 };
 
 p._onResize = function() {
+	this.cameraOrthoScreen.ortho( 0, GL.width, GL.height, 0);
 };
 
 module.exports = Scene;
-},{"./Camera":3,"./GLTools":10,"./QuatRotation":13,"./SimpleCamera":17,"gl-matrix":2}],15:[function(_dereq_,module,exports){
+},{"./CameraOrtho":5,"./GLTools":14,"./QuatRotation":18,"./SimpleCamera":22,"gl-matrix":2}],20:[function(_dereq_,module,exports){
 // Scheduler.js
 
 "use strict";
@@ -16827,7 +19141,7 @@ Scheduler.getInstance = function() {
 };
 
 module.exports = Scheduler.getInstance();
-},{}],16:[function(_dereq_,module,exports){
+},{}],21:[function(_dereq_,module,exports){
 "use strict";
 
 
@@ -16835,17 +19149,25 @@ var ShaderLibs = function() { };
 
 ShaderLibs.shaders = {};
 
-ShaderLibs.shaders.copyVert = "#define GLSLIFY 1\n\n#define SHADER_NAME BASIC_VERTEXXXX\n\nprecision highp float;\nattribute vec3 aVertexPosition;\nattribute vec2 aTextureCoord;\n\nuniform mat4 uMVMatrix;\nuniform mat4 uPMatrix;\n\nvarying vec2 vTextureCoord;\n\nvoid main() {\n    gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);\n    vTextureCoord = aTextureCoord;\n}";
+ShaderLibs.shaders.copyVert = "#define GLSLIFY 1\n\n#define SHADER_NAME BASIC_VERTEX\n\nprecision highp float;\nattribute vec3 aVertexPosition;\nattribute vec2 aTextureCoord;\n\nuniform mat4 uMVMatrix;\nuniform mat4 uPMatrix;\n\nvarying vec2 vTextureCoord;\n\nvoid main(void) {\n    gl_Position = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);\n    vTextureCoord = aTextureCoord;\n}";
+ShaderLibs.shaders.copyNormalVert = "#define GLSLIFY 1\n\n// copyWithNormals.vert\n\n#define SHADER_NAME BASIC_VERTEX\n\nprecision highp float;\nattribute vec3 aVertexPosition;\nattribute vec3 aNormal;\nattribute vec2 aTextureCoord;\n\nuniform mat4 uMVMatrix;\nuniform mat4 uPMatrix;\n\nvarying vec2 vTextureCoord;\nvarying vec3 vNormal;\nvarying vec3 vVertex;\n\nvoid main(void) {\n\tgl_Position   = uPMatrix * uMVMatrix * vec4(aVertexPosition, 1.0);\n\tvTextureCoord = aTextureCoord;\n\tvNormal       = aNormal;\n\tvVertex \t  = aVertexPosition;\n}";
 
 ShaderLibs.shaders.generalVert = "#define GLSLIFY 1\n\n#define SHADER_NAME GENERAL_VERTEX\n\nprecision highp float;\nattribute vec3 aVertexPosition;\nattribute vec2 aTextureCoord;\n\nuniform mat4 uMVMatrix;\nuniform mat4 uPMatrix;\nuniform vec3 position;\nuniform vec3 scale;\n\nvarying vec2 vTextureCoord;\n\nvoid main(void) {\n    vec3 pos = aVertexPosition;\n    pos *= scale;\n    pos += position;\n    gl_Position = uPMatrix * uMVMatrix * vec4(pos, 1.0);\n    vTextureCoord = aTextureCoord;\n}";
+ShaderLibs.shaders.generalNormalVert = "#define GLSLIFY 1\n\n#define SHADER_NAME GENERAL_VERTEX\n\nprecision highp float;\nattribute vec3 aVertexPosition;\nattribute vec3 aNormal;\nattribute vec2 aTextureCoord;\n\nuniform mat4 uMVMatrix;\nuniform mat4 uPMatrix;\nuniform vec3 position;\nuniform vec3 scale;\n\nvarying vec3 vVertex;\nvarying vec3 vNormal;\nvarying vec2 vTextureCoord;\n\nvoid main(void) {\n\tvec3 pos      = aVertexPosition;\n\tpos           *= scale;\n\tpos           += position;\n\tgl_Position   = uPMatrix * uMVMatrix * vec4(pos, 1.0);\n\tvTextureCoord = aTextureCoord;\n\t\n\tvNormal       = aNormal;\n\tvVertex       = pos;\n}";
+ShaderLibs.shaders.generalWithNormalVert = "#define GLSLIFY 1\n\n#define SHADER_NAME GENERAL_VERTEX\n\nprecision highp float;\nattribute vec3 aVertexPosition;\nattribute vec3 aNormal;\nattribute vec2 aTextureCoord;\n\nuniform mat4 uMVMatrix;\nuniform mat4 uPMatrix;\nuniform vec3 position;\nuniform vec3 scale;\n\nvarying vec3 vVertex;\nvarying vec3 vNormal;\nvarying vec2 vTextureCoord;\n\nvoid main(void) {\n\tvec3 pos      = aVertexPosition;\n\tpos           *= scale;\n\tpos           += position;\n\tgl_Position   = uPMatrix * uMVMatrix * vec4(pos, 1.0);\n\tvTextureCoord = aTextureCoord;\n\t\n\tvNormal       = aNormal;\n\tvVertex       = pos;\n}";
 
-ShaderLibs.shaders.copyFrag = "#define GLSLIFY 1\n\n#define SHADER_NAME SIMPLE_TEXTURE\n\nprecision highp float;\nvarying vec2 vTextureCoord;\nuniform sampler2D texture;\n\nvoid main(void) {\n    gl_FragColor = texture2D(texture, vTextureCoord);\n}";
+ShaderLibs.shaders.copyFrag = "#define GLSLIFY 1\n\n#define SHADER_NAME SIMPLE_TEXTURE\n\nprecision highp float;\nvarying vec2 vTextureCoord;\nuniform sampler2D texture;\n\nvoid main(void) {\n    gl_FragColor = texture2D(texture, vTextureCoord);\n}\n";
+
 
 ShaderLibs.shaders.alphaFrag = "#define GLSLIFY 1\n\n#define SHADER_NAME TEXTURE_WITH_ALPHA\n\nprecision highp float;\nvarying vec2 vTextureCoord;\nuniform sampler2D texture;\nuniform float opacity;\n\nvoid main(void) {\n    gl_FragColor = texture2D(texture, vTextureCoord);\n    gl_FragColor.a *= opacity;\n}";
 
 ShaderLibs.shaders.simpleColorFrag = "#define GLSLIFY 1\n\n#define SHADER_NAME SIMPLE_COLOR_FRAGMENT\n\nprecision highp float;\nuniform vec3 color;\nuniform float opacity;\n\nvoid main(void) {\n    gl_FragColor = vec4(color, opacity);\n}";
 
 ShaderLibs.shaders.depthFrag = "#define GLSLIFY 1\n\nprecision highp float;\nvarying vec2 vTextureCoord;\nuniform sampler2D texture;\nuniform float n;\nuniform float f;\n\nfloat getDepth(float z) {\n\treturn (6.0 * n) / (f + n - z*(f-n));\n}\n\nvoid main(void) {\n    float r = texture2D(texture, vTextureCoord).r;\n    float grey = getDepth(r);\n    gl_FragColor = vec4(grey, grey, grey, 1.0);\n}";
+
+ShaderLibs.shaders.simpleCopyLighting = "#define GLSLIFY 1\n\n#define SHADER_NAME SIMPLE_TEXTURE_LIGHTING\n\nprecision highp float;\n\nuniform vec3 ambient;\nuniform vec3 lightPosition;\nuniform vec3 lightColor;\nuniform float lightWeight;\n\nuniform sampler2D texture;\n\nvarying vec2 vTextureCoord;\nvarying vec3 vVertex;\nvarying vec3 vNormal;\n\nvoid main(void) {\n\tvec3 L        = normalize(lightPosition-vVertex);\n\tfloat lambert = max(dot(vNormal, L), .0);\n\tvec3 light    = ambient + lightColor * lambert * lightWeight;\n\tvec4 color \t  = texture2D(texture, vTextureCoord);\n\tcolor.rgb \t  *= light;\n\t\n\tgl_FragColor  = color;\n}";
+ShaderLibs.shaders.simpleColorLighting = "#define GLSLIFY 1\n\n// simpleColorLighting.frag\n\n#define SHADER_NAME SIMPLE_COLOR_LIGHTING\n\nprecision highp float;\n\nuniform vec3 ambient;\nuniform vec3 lightPosition;\nuniform vec3 lightColor;\nuniform float lightWeight;\n\nuniform vec3 color;\nuniform float opacity;\n\nvarying vec3 vVertex;\nvarying vec3 vNormal;\n\nvoid main(void) {\n\tvec3 L        = normalize(lightPosition-vVertex);\n\tfloat lambert = max(dot(vNormal, L), .0);\n\tvec3 light    = ambient + lightColor * lambert * lightWeight;\n\t\n\tgl_FragColor  = vec4(color * light, opacity);\n}";
+
 
 
 ShaderLibs.getShader = function(mId) {
@@ -16854,7 +19176,7 @@ ShaderLibs.getShader = function(mId) {
 
 ShaderLibs.get = ShaderLibs.getShader;
 module.exports = ShaderLibs;
-},{}],17:[function(_dereq_,module,exports){
+},{}],22:[function(_dereq_,module,exports){
 "use strict";
 
 var glm = _dereq_("gl-matrix");
@@ -17037,7 +19359,7 @@ p.__defineSetter__("ry", function(mValue) {
 });
 
 module.exports = SimpleCamera;
-},{"./CameraPerspective":4,"./EaseNumber":5,"gl-matrix":2}],18:[function(_dereq_,module,exports){
+},{"./CameraPerspective":6,"./EaseNumber":7,"gl-matrix":2}],23:[function(_dereq_,module,exports){
 "use strict";
 
 var SimpleImageLoader = function() {
@@ -17088,7 +19410,7 @@ p._onImageLoaded = function() {
 };
 
 module.exports = SimpleImageLoader;
-},{}],19:[function(_dereq_,module,exports){
+},{}],24:[function(_dereq_,module,exports){
 // View.js
 "use strict";
 
@@ -17112,7 +19434,7 @@ p.render = function() {
 module.exports = View;
 
 
-},{"./GLShader":8}],20:[function(_dereq_,module,exports){
+},{"./GLShader":12}],25:[function(_dereq_,module,exports){
 // ViewAxis.js
 
 "use strict";
@@ -17182,7 +19504,7 @@ p.render = function() {
 
 module.exports = ViewAxis;
 
-},{"./GLTools":10,"./Mesh":11,"./View":19}],21:[function(_dereq_,module,exports){
+},{"./GLTools":14,"./Mesh":15,"./View":24}],26:[function(_dereq_,module,exports){
 "use strict";
 
 var View = _dereq_("./View");
@@ -17211,7 +19533,7 @@ p.render = function(aTexture) {
 
 module.exports = ViewCopy;
 
-},{"./GLTools":10,"./MeshUtils":12,"./View":19}],22:[function(_dereq_,module,exports){
+},{"./GLTools":14,"./MeshUtils":16,"./View":24}],27:[function(_dereq_,module,exports){
 // ViewDotPlanes.js
 
 "use strict";
@@ -17275,17 +19597,122 @@ p.render = function() {
 
 module.exports = ViewDotPlanes;
 
-},{"./GLTools":10,"./Mesh":11,"./ShaderLibs":16,"./View":19}]},{},[1])(1)
+},{"./GLTools":14,"./Mesh":15,"./ShaderLibs":21,"./View":24}],28:[function(_dereq_,module,exports){
+"use strict";
+
+var Pass = _dereq_("./Pass");
+
+var EffectComposer = function() {
+	this._passes = [];
+};
+
+var p = EffectComposer.prototype = new Pass();
+
+
+p.addPass = function(pass) {
+	this._passes.push(pass);
+};
+
+
+p.render = function(texture) {
+	this.texture = texture;
+	for(var i=0; i<this._passes.length; i++) {
+		this.texture = this._passes[i].render(this.texture);
+	}
+
+	return this.texture;
+};
+
+p.getTexture = function() {
+	return this.texture;	
+};
+
+
+module.exports =EffectComposer;
+},{"./Pass":29}],29:[function(_dereq_,module,exports){
+"use strict";
+
+var gl,GL = _dereq_("../GLTools");
+var ViewCopy = _dereq_("../ViewCopy");
+var FrameBuffer = _dereq_("../FrameBuffer");
+
+var Pass = function(mParams, mWidth, mHeight, mFboParams) {
+	mWidth = mWidth === undefined ? 512 : mWidth;
+	mHeight = mHeight === undefined ? 512 : mHeight;
+	gl = GL.gl;
+	if(!mParams) {	return;	}
+	if( (typeof mParams) === "string") {
+		this.view = new ViewCopy(null, mParams);
+	} else {
+		this.view = mParams;
+	}
+
+	this.width = mWidth;
+	this.height = mHeight;
+	this._fboParams = mFboParams;
+
+	this._init();
+};
+
+var p = Pass.prototype;
+
+
+p._init = function() {
+	this._fbo = new FrameBuffer(this.width, this.height, this._fboParams);
+	this._fbo.bind();
+	GL.setViewport(0, 0, this._fbo.width, this._fbo.height);
+	GL.clear(0, 0, 0, 0);
+	this._fbo.unbind();
+	GL.setViewport(0, 0, GL.canvas.width, GL.canvas.height);
+
+};
+
+
+p.render = function(texture) {
+	this._fbo.bind();
+	GL.setViewport(0, 0, this._fbo.width, this._fbo.height);
+	GL.clear(0, 0, 0, 0);
+	this.view.render(texture);
+	this._fbo.unbind();
+	GL.setViewport(0, 0, GL.canvas.width, GL.canvas.height);
+
+	return this._fbo.getTexture();
+};
+
+p.getTexture = function() {
+	return this._fbo.getTexture();
+};
+
+p.getFbo = function() {
+	return this._fbo;
+};
+
+module.exports = Pass;
+},{"../FrameBuffer":10,"../GLTools":14,"../ViewCopy":26}],30:[function(_dereq_,module,exports){
+// PassGreyscale.js
+
+"use strict";
+var Pass = _dereq_("./Pass");
+
+
+var PassGreyscale = function(mWidth, mHeight, mFboParams) {
+	Pass.call(this, "#define GLSLIFY 1\n\n// greyscale.frag\n\n#define SHADER_NAME FRAGMENT_GREYSCALE\n\nprecision highp float;\n\nvarying vec2 vTextureCoord;\n\nuniform sampler2D texture;\n\nvoid main(void) {\n\tvec4 color = texture2D(texture, vTextureCoord);\n\tfloat grey = (color.r + color.g + color.b) / 3.0;\n\tgl_FragColor = vec4(vec3(grey), color.a);\n}", mWidth, mHeight, mFboParams);
+};
+
+PassGreyscale.prototype = new Pass();
+
+module.exports = PassGreyscale;
+},{"./Pass":29}]},{},[1])(1)
 });
 
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],7:[function(require,module,exports){
+},{}],11:[function(require,module,exports){
 (function (global){
 !function(t){if("object"==typeof exports&&"undefined"!=typeof module)module.exports=t();else if("function"==typeof define&&define.amd)define([],t);else{var e;"undefined"!=typeof window?e=window:"undefined"!=typeof global?e=global:"undefined"!=typeof self&&(e=self),e.Sono=t()}}(function(){var t;return function e(t,n,i){function o(r,u){if(!n[r]){if(!t[r]){var a="function"==typeof require&&require;if(!u&&a)return a(r,!0);if(s)return s(r,!0);var c=new Error("Cannot find module '"+r+"'");throw c.code="MODULE_NOT_FOUND",c}var h=n[r]={exports:{}};t[r][0].call(h.exports,function(e){var n=t[r][1][e];return o(n?n:e)},h,h.exports,e,t,n,i)}return n[r].exports}for(var s="function"==typeof require&&require,r=0;r<i.length;r++)o(i[r]);return o}({1:[function(t,e){"use strict";function n(){this.VERSION="0.0.6",window.AudioContext=window.AudioContext||window.webkitAudioContext;var t=window.AudioContext?new window.AudioContext:null,e=t?t.destination:null;this._group=new s(t,e),this._gain=this._group.gain,this._sounds=this._group.sounds,this._context=t,c.setContext(t),this._handleTouchlock(),this._handlePageVisibility()}var i=t("./lib/utils/browser.js"),o=t("./lib/utils/file.js"),s=t("./lib/group.js"),r=t("./lib/utils/loader.js"),u=t("./lib/sound.js"),a=t("./lib/utils/sound-group.js"),c=t("./lib/utils/utils.js");n.prototype.createSound=function(t){if(o.containsURL(t))return this.load(t);var e=t&&t.noWebAudio?null:this._context,n=new u(e,this._gain);return n.isTouchLocked=this._isTouchLocked,t&&(n.data=t.data||t,n.id=void 0!==t.id?t.id:"",n.loop=!!t.loop,n.volume=t.volume),this._group.add(n),n},n.prototype.destroySound=function(t){return t?(this._sounds.some(function(e,n,i){return e===t||e.id===t?(i.splice(n,1),e.loader&&(e.loader.destroy(),e.loader=null),e.destroy(),!0):void 0}),this):void 0},n.prototype.destroyAll=function(){return this._group.destroy(),this},n.prototype.getSound=function(t){var e=null;return this._sounds.some(function(n){return n.id===t?(e=n,!0):void 0}),e},n.prototype.createGroup=function(t){var e=new a(this._context,this._gain);return t&&t.forEach(function(t){e.add(t)}),e},n.prototype.load=function(t){if(!t)throw new Error("ArgumentException: Sono.load: param config is undefined");var e,n,i=!!t.noWebAudio||!!t.asMediaElement,s=t.onProgress,u=t.onComplete,a=t.thisArg||t.context||this,c=t.url||t;if(o.containsURL(c))e=this._queue(t,i),n=e.loader;else{if(!Array.isArray(c)||!o.containsURL(c[0].url))return null;e=[],n=new r.Group,c.forEach(function(t){e.push(this._queue(t,i,n))},this)}return s&&n.onProgress.add(s,a),u&&n.onComplete.addOnce(function(){u.call(a,e)}),n.start(),e},n.prototype._queue=function(t,e,n){var i=o.getSupportedFile(t.url||t),s=t&&t.noWebAudio?null:this._context,a=new u(s,this._gain);a.isTouchLocked=this._isTouchLocked,this._group.add(a),a.id=void 0!==t.id?t.id:"",a.loop=!!t.loop,a.volume=t.volume;var c=new r(i);return c.audioContext=e?null:this._context,c.isTouchLocked=this._isTouchLocked,c.onBeforeComplete.addOnce(function(t){a.data=t}),a.loader=c,n&&n.add(c),a},n.prototype.mute=function(){return this._group.mute(),this},n.prototype.unMute=function(){return this._group.unMute(),this},Object.defineProperty(n.prototype,"volume",{get:function(){return this._group.volume},set:function(t){this._group.volume=t}}),n.prototype.fade=function(t,e){return this._group.fade(t,e),this},n.prototype.pauseAll=function(){return this._group.pause(),this},n.prototype.resumeAll=function(){return this._group.resume(),this},n.prototype.stopAll=function(){return this._group.stop(),this},n.prototype.play=function(t,e,n){return this.getSound(t).play(e,n),this},n.prototype.pause=function(t){return this.getSound(t).pause(),this},n.prototype.stop=function(t){return this.getSound(t).stop(),this},n.prototype._handleTouchlock=function(){var t=function(){this._isTouchLocked=!1,this._sounds.forEach(function(t){t.isTouchLocked=!1,t.loader&&(t.loader.isTouchLocked=!1)})};this._isTouchLocked=i.handleTouchLock(t,this)},n.prototype._handlePageVisibility=function(){function t(){o.forEach(function(t){t.playing&&(t.pause(),n.push(t))})}function e(){for(;n.length;)n.pop().play()}var n=[],o=this._sounds;i.handlePageVisibility(t,e,this)},n.prototype.log=function(){var t="Sono "+this.VERSION,e="Supported:"+this.isSupported+" WebAudioAPI:"+this.hasWebAudio+" TouchLocked:"+this._isTouchLocked+" Extensions:"+o.extensions;if(navigator.userAgent.indexOf("Chrome")>-1){var n=["%c ♫ "+t+" ♫ %c "+e+" ","color: #FFFFFF; background: #379F7A","color: #1F1C0D; background: #E0FBAC"];console.log.apply(console,n)}else window.console&&window.console.log.call&&console.log.call(console,t+" "+e)},Object.defineProperties(n.prototype,{canPlay:{get:function(){return o.canPlay}},context:{get:function(){return this._context}},effect:{get:function(){return this._group.effect}},extensions:{get:function(){return o.extensions}},hasWebAudio:{get:function(){return!!this._context}},isSupported:{get:function(){return o.extensions.length>0}},gain:{get:function(){return this._gain}},sounds:{get:function(){return this._group.sounds.slice(0)}},utils:{get:function(){return c}}}),e.exports=new n},{"./lib/group.js":14,"./lib/sound.js":15,"./lib/utils/browser.js":21,"./lib/utils/file.js":22,"./lib/utils/loader.js":23,"./lib/utils/sound-group.js":25,"./lib/utils/utils.js":26}],2:[function(e,n){!function(e){function i(t,e,n,i,o){this._listener=e,this._isOnce=n,this.context=i,this._signal=t,this._priority=o||0}function o(t,e){if("function"!=typeof t)throw new Error("listener is a required param of {fn}() and should be a Function.".replace("{fn}",e))}function s(){this._bindings=[],this._prevParams=null;var t=this;this.dispatch=function(){s.prototype.dispatch.apply(t,arguments)}}i.prototype={active:!0,params:null,execute:function(t){var e,n;return this.active&&this._listener&&(n=this.params?this.params.concat(t):t,e=this._listener.apply(this.context,n),this._isOnce&&this.detach()),e},detach:function(){return this.isBound()?this._signal.remove(this._listener,this.context):null},isBound:function(){return!!this._signal&&!!this._listener},isOnce:function(){return this._isOnce},getListener:function(){return this._listener},getSignal:function(){return this._signal},_destroy:function(){delete this._signal,delete this._listener,delete this.context},toString:function(){return"[SignalBinding isOnce:"+this._isOnce+", isBound:"+this.isBound()+", active:"+this.active+"]"}},s.prototype={VERSION:"1.0.0",memorize:!1,_shouldPropagate:!0,active:!0,_registerListener:function(t,e,n,o){var s,r=this._indexOfListener(t,n);if(-1!==r){if(s=this._bindings[r],s.isOnce()!==e)throw new Error("You cannot add"+(e?"":"Once")+"() then add"+(e?"Once":"")+"() the same listener without removing the relationship first.")}else s=new i(this,t,e,n,o),this._addBinding(s);return this.memorize&&this._prevParams&&s.execute(this._prevParams),s},_addBinding:function(t){var e=this._bindings.length;do--e;while(this._bindings[e]&&t._priority<=this._bindings[e]._priority);this._bindings.splice(e+1,0,t)},_indexOfListener:function(t,e){for(var n,i=this._bindings.length;i--;)if(n=this._bindings[i],n._listener===t&&n.context===e)return i;return-1},has:function(t,e){return-1!==this._indexOfListener(t,e)},add:function(t,e,n){return o(t,"add"),this._registerListener(t,!1,e,n)},addOnce:function(t,e,n){return o(t,"addOnce"),this._registerListener(t,!0,e,n)},remove:function(t,e){o(t,"remove");var n=this._indexOfListener(t,e);return-1!==n&&(this._bindings[n]._destroy(),this._bindings.splice(n,1)),t},removeAll:function(){for(var t=this._bindings.length;t--;)this._bindings[t]._destroy();this._bindings.length=0},getNumListeners:function(){return this._bindings.length},halt:function(){this._shouldPropagate=!1},dispatch:function(){if(this.active){var t,e=Array.prototype.slice.call(arguments),n=this._bindings.length;if(this.memorize&&(this._prevParams=e),n){t=this._bindings.slice(),this._shouldPropagate=!0;do n--;while(t[n]&&this._shouldPropagate&&t[n].execute(e)!==!1)}}},forget:function(){this._prevParams=null},dispose:function(){this.removeAll(),delete this._bindings,delete this._prevParams},toString:function(){return"[Signal active:"+this.active+" numListeners:"+this.getNumListeners()+"]"}};var r=s;r.Signal=s,"function"==typeof t&&t.amd?t(function(){return r}):"undefined"!=typeof n&&n.exports?n.exports=r:e.signals=r}(this)},{}],3:[function(t,e){"use strict";function n(t){this._context=t||new r,this._destination=null,this._nodeList=[],this._sourceNode=null}var i=t("./effect/analyser.js"),o=t("./effect/distortion.js"),s=t("./effect/echo.js"),r=t("./effect/fake-context.js"),u=t("./effect/filter.js"),a=t("./effect/flanger.js"),c=t("./effect/panner.js"),h=t("./effect/phaser.js"),d=t("./effect/recorder.js"),l=t("./effect/reverb.js");n.prototype.add=function(t){return t?(this._nodeList.push(t),this._updateConnections(),t):void 0},n.prototype.remove=function(t){for(var e=this._nodeList.length,n=0;e>n;n++)if(t===this._nodeList[n]){this._nodeList.splice(n,1);break}var i=t._output||t;return i.disconnect(),this._updateConnections(),t},n.prototype.removeAll=function(){for(;this._nodeList.length;)this._nodeList.pop().disconnect();return this._updateConnections(),this},n.prototype.destroy=function(){this._context=null,this._destination=null,this._nodeList=[],this._sourceNode=null},n.prototype._connect=function(t,e){var n=t._output||t;n.disconnect(),n.connect(e)},n.prototype._connectToDestination=function(t){var e=this._nodeList.length,n=e?this._nodeList[e-1]:this._sourceNode;n&&this._connect(n,t),this._destination=t},n.prototype._updateConnections=function(){if(this._sourceNode){for(var t,e,n=0;n<this._nodeList.length;n++)t=this._nodeList[n],e=0===n?this._sourceNode:this._nodeList[n-1],this._connect(e,t);this._destination&&this._connectToDestination(this._destination)}},Object.defineProperty(n.prototype,"panning",{get:function(){return this._panning||(this._panning=new c(this._context)),this._panning}}),n.prototype.analyser=function(t,e,n,o){var s=new i(this._context,t,e,n,o);return this.add(s)},n.prototype.compressor=function(t){t=t||{};var e=this._context.createDynamicsCompressor();return e.update=function(t){e.threshold.value=void 0!==t.threshold?t.threshold:-24,e.knee.value=void 0!==t.knee?t.knee:30,e.ratio.value=void 0!==t.ratio?t.ratio:12,e.reduction.value=void 0!==t.reduction?t.reduction:-10,e.attack.value=void 0!==t.attack?t.attack:3e-4,e.release.value=void 0!==t.release?t.release:.25},e.update(t),this.add(e)},n.prototype.convolver=function(t){var e=this._context.createConvolver();return e.buffer=t,this.add(e)},n.prototype.delay=function(t){var e=this._context.createDelay();return void 0!==t&&(e.delayTime.value=t),this.add(e)},n.prototype.echo=function(t,e){var n=new s(this._context,t,e);return this.add(n)},n.prototype.distortion=function(t){var e=new o(this._context,t);return this.add(e)},n.prototype.filter=function(t,e,n,i){var o=new u(this._context,t,e,n,i);return this.add(o)},n.prototype.lowpass=function(t,e,n){return this.filter("lowpass",t,e,n)},n.prototype.highpass=function(t,e,n){return this.filter("highpass",t,e,n)},n.prototype.bandpass=function(t,e,n){return this.filter("bandpass",t,e,n)},n.prototype.lowshelf=function(t,e,n){return this.filter("lowshelf",t,e,n)},n.prototype.highshelf=function(t,e,n){return this.filter("highshelf",t,e,n)},n.prototype.peaking=function(t,e,n){return this.filter("peaking",t,e,n)},n.prototype.notch=function(t,e,n){return this.filter("notch",t,e,n)},n.prototype.allpass=function(t,e,n){return this.filter("allpass",t,e,n)},n.prototype.flanger=function(t){var e=new a(this._context,t);return this.add(e)},n.prototype.gain=function(t){var e=this._context.createGain();return void 0!==t&&(e.gain.value=t),e},n.prototype.panner=function(){var t=new c(this._context);return this.add(t)},n.prototype.phaser=function(t){var e=new h(this._context,t);return this.add(e)},n.prototype.recorder=function(t){var e=new d(this._context,t);return this.add(e)},n.prototype.reverb=function(t,e,n){var i=new l(this._context,t,e,n);return this.add(i)},n.prototype.script=function(t){t=t||{};var e=t.bufferSize||1024,n=void 0===t.inputChannels?0:n,i=void 0===t.outputChannels?1:i,o=this._context.createScriptProcessor(e,n,i),s=t.thisArg||t.context||o,r=t.callback||function(){};return o.onaudioprocess=r.bind(s),this.add(o)},n.prototype.setSource=function(t){return this._sourceNode=t,this._updateConnections(),t},n.prototype.setDestination=function(t){return this._connectToDestination(t),t},e.exports=n},{"./effect/analyser.js":4,"./effect/distortion.js":5,"./effect/echo.js":6,"./effect/fake-context.js":7,"./effect/filter.js":8,"./effect/flanger.js":9,"./effect/panner.js":10,"./effect/phaser.js":11,"./effect/recorder.js":12,"./effect/reverb.js":13}],4:[function(t,e){"use strict";function n(t,e,n,i,o){e=e||32;var s,r,u=t.createAnalyser();u.fftSize=e,void 0!==n&&(u.smoothingTimeConstant=n),void 0!==i&&(u.minDecibels=i),void 0!==o&&(u.maxDecibels=o);var a=function(){(e!==u.fftSize||void 0===s)&&(s=new Uint8Array(u.fftSize),r=new Uint8Array(u.frequencyBinCount),e=u.fftSize)};return a(),u.getWaveform=function(){return a(),this.getByteTimeDomainData(s),s},u.getFrequencies=function(){return a(),this.getByteFrequencyData(r),r},Object.defineProperties(u,{smoothing:{get:function(){return u.smoothingTimeConstant},set:function(t){u.smoothingTimeConstant=t}}}),u}e.exports=n},{}],5:[function(t,e){"use strict";function n(t,e){e=e||1;var n=t.createWaveShaper();return n.update=function(t){e=t;for(var n,i=100*t,o=22050,s=new Float32Array(o),r=Math.PI/180,u=0;o>u;u++)n=2*u/o-1,s[u]=(3+i)*n*20*r/(Math.PI+i*Math.abs(n));this.curve=s},Object.defineProperties(n,{amount:{get:function(){return e},set:function(t){this.update(t)}}}),void 0!==e&&n.update(e),n}e.exports=n},{}],6:[function(t,e){"use strict";function n(t,e,n){var i=t.createGain(),o=t.createDelay(),s=t.createGain(),r=t.createGain();s.gain.value=n||.5,o.delayTime.value=e||.5,i.connect(o),i.connect(r),o.connect(s),s.connect(o),s.connect(r);var u=i;return u.name="Echo",u._output=r,Object.defineProperties(u,{delay:{get:function(){return o.delayTime.value},set:function(t){o.delayTime.value=t}},feedback:{get:function(){return s.gain.value},set:function(t){s.gain.value=t}}}),u}e.exports=n},{}],7:[function(t,e){"use strict";function n(){var t=Date.now(),e=function(){},n=function(){return{value:1,defaultValue:1,linearRampToValueAtTime:e,setValueAtTime:e,exponentialRampToValueAtTime:e,setTargetAtTime:e,setValueCurveAtTime:e,cancelScheduledValues:e}},i=function(){return{connect:e,disconnect:e,frequencyBinCount:0,smoothingTimeConstant:0,fftSize:0,minDecibels:0,maxDecibels:0,getByteTimeDomainData:e,getByteFrequencyData:e,getFloatTimeDomainData:e,getFloatFrequencyData:e,gain:n(),panningModel:0,setPosition:e,setOrientation:e,setVelocity:e,distanceModel:0,refDistance:0,maxDistance:0,rolloffFactor:0,coneInnerAngle:360,coneOuterAngle:360,coneOuterGain:0,type:0,frequency:n(),delayTime:n(),buffer:0,threshold:n(),knee:n(),ratio:n(),attack:n(),release:n(),reduction:n(),oversample:0,curve:0,sampleRate:1,length:0,duration:0,numberOfChannels:0,getChannelData:function(){return[]},copyFromChannel:e,copyToChannel:e,dopplerFactor:0,speedOfSound:0,start:e}};return window.Uint8Array||(window.Int8Array=window.Uint8Array=window.Uint8ClampedArray=window.Int16Array=window.Uint16Array=window.Int32Array=window.Uint32Array=window.Float32Array=window.Float64Array=Array),{createAnalyser:i,createBuffer:i,createBiquadFilter:i,createChannelMerger:i,createChannelSplitter:i,createDynamicsCompressor:i,createConvolver:i,createDelay:i,createGain:i,createOscillator:i,createPanner:i,createScriptProcessor:i,createWaveShaper:i,listener:i(),get currentTime(){return(Date.now()-t)/1e3}}}e.exports=n},{}],8:[function(t,e){"use strict";function n(t,e,n,i,o){var s=40,r=t.sampleRate/2,u=t.createBiquadFilter();u.type=e,void 0!==n&&(u.frequency.value=n),void 0!==i&&(u.Q.value=i),void 0!==o&&(u.gain.value=o);var a=function(t){var e=Math.log(r/s)/Math.LN2,n=Math.pow(2,e*(t-1));return r*n};return u.update=function(t,e){void 0!==t&&(this.frequency.value=t),void 0!==e&&(this.gain.value=e)},u.setByPercent=function(t,e,n){u.frequency.value=a(t),void 0!==e&&(u.Q.value=e),void 0!==n&&(u.gain.value=n)},u}e.exports=n},{}],9:[function(t,e){"use strict";function n(t,e){var n=e.feedback||.5,i=e.delay||.005,o=e.gain||.002,s=e.frequency||.25,r=t.createGain(),u=t.createDelay(),a=t.createGain(),c=t.createOscillator(),h=t.createGain(),d=t.createGain();u.delayTime.value=i,a.gain.value=n,c.type="sine",c.frequency.value=s,h.gain.value=o,r.connect(d),r.connect(u),u.connect(d),u.connect(a),a.connect(r),c.connect(h),h.connect(u.delayTime),c.start(0);var l=r;return l.name="Flanger",l._output=d,Object.defineProperties(l,{delay:{get:function(){return u.delayTime.value},set:function(t){u.delayTime.value=t}},lfoFrequency:{get:function(){return c.frequency.value},set:function(t){c.frequency.value=t}},lfoGain:{get:function(){return h.gain.value},set:function(t){h.gain.value=t}},feedback:{get:function(){return a.gain.value},set:function(t){a.gain.value=t}}}),l}function i(t,e){var n=e.feedback||.5,i=e.delay||.003,o=e.gain||.005,s=e.frequency||.5,r=t.createGain(),u=t.createChannelSplitter(2),a=t.createChannelMerger(2),c=t.createGain(),h=t.createGain(),d=t.createOscillator(),l=t.createGain(),f=t.createGain(),p=t.createDelay(),_=t.createDelay(),g=t.createGain();c.gain.value=h.gain.value=n,p.delayTime.value=_.delayTime.value=i,d.type="sine",d.frequency.value=s,l.gain.value=o,f.gain.value=0-o,r.connect(u),u.connect(p,0),u.connect(_,1),p.connect(c),_.connect(h),c.connect(_),h.connect(p),p.connect(a,0,0),_.connect(a,0,1),a.connect(g),r.connect(g),d.connect(l),d.connect(f),l.connect(p.delayTime),f.connect(_.delayTime),d.start(0);var y=r;return y.name="StereoFlanger",y._output=g,Object.defineProperties(y,{delay:{get:function(){return p.delayTime.value},set:function(t){p.delayTime.value=_.delayTime.value=t}},lfoFrequency:{get:function(){return d.frequency.value},set:function(t){d.frequency.value=t}},lfoGain:{get:function(){return l.gain.value},set:function(t){l.gain.value=f.gain.value=t}},feedback:{get:function(){return c.gain.value},set:function(t){c.gain.value=h.gain.value=t}}}),y}function o(t,e){return e=e||{},e.stereo?new i(t,e):new n(t,e)}e.exports=o},{}],10:[function(t,e){"use strict";function n(t){var e=t.createPanner();e.panningModel=n.defaults.panningModel,e.distanceModel=n.defaults.distanceModel,e.refDistance=n.defaults.refDistance,e.maxDistance=n.defaults.maxDistance,e.rolloffFactor=n.defaults.rolloffFactor,e.coneInnerAngle=n.defaults.coneInnerAngle,e.coneOuterAngle=n.defaults.coneOuterAngle,e.coneOuterGain=n.defaults.coneOuterGain,e.setPosition(0,0,0),e.setOrientation(0,0,0);var i={pool:[],get:function(t,e,n){var i=this.pool.length?this.pool.pop():{x:0,y:0,z:0};return void 0!==t&&isNaN(t)&&"x"in t&&"y"in t&&"z"in t?(i.x=t.x||0,i.y=t.y||0,i.z=t.z||0):(i.x=t||0,i.y=e||0,i.z=n||0),i},dispose:function(t){this.pool.push(t)}},o=i.get(0,1,0),s=function(t,e){var n=i.get(e.x,e.y,e.z);a(n,o),a(n,e),c(n),c(e),t.setOrientation(e.x,e.y,e.z,n.x,n.y,n.z),i.dispose(e),i.dispose(n)},r=function(t,e){t.setPosition(e.x,e.y,e.z),i.dispose(e)},u=function(t,e){t.setVelocity(e.x,e.y,e.z),i.dispose(e)},a=function(t,e){var n=t.x,i=t.y,o=t.z,s=e.x,r=e.y,u=e.z;t.x=i*u-o*r,t.y=o*s-n*u,t.z=n*r-i*s},c=function(t){if(0===t.x&&0===t.y&&0===t.z)return t;var e=Math.sqrt(t.x*t.x+t.y*t.y+t.z*t.z),n=1/e;return t.x*=n,t.y*=n,t.z*=n,t};return e.setX=function(t){var n=Math.PI/4,i=2*n,o=t*n,s=o+i;s>i&&(s=Math.PI-s),o=Math.sin(o),s=Math.sin(s),e.setPosition(o,0,s)},e.setSourcePosition=function(t,n,o){r(e,i.get(t,n,o))},e.setSourceOrientation=function(t,n,o){s(e,i.get(t,n,o))},e.setSourceVelocity=function(t,n,o){u(e,i.get(t,n,o))},e.setListenerPosition=function(e,n,o){r(t.listener,i.get(e,n,o))},e.setListenerOrientation=function(e,n,o){s(t.listener,i.get(e,n,o))},e.setListenerVelocity=function(e,n,o){u(t.listener,i.get(e,n,o))},e.calculateVelocity=function(t,e,n){var o=t.x-e.x,s=t.y-e.y,r=t.z-e.z;return i.get(o/n,s/n,r/n)},e.setDefaults=function(t){Object.keys(t).forEach(function(e){n.defaults[e]=t[e]})},e}n.defaults={panningModel:"HRTF",distanceModel:"linear",refDistance:1,maxDistance:1e3,rolloffFactor:1,coneInnerAngle:360,coneOuterAngle:0,coneOuterGain:0},e.exports=n},{}],11:[function(t,e){"use strict";function n(t,e){e=e||{};var n,i=e.stages||8,o=e.frequency||.5,s=e.gain||300,r=e.feedback||.5,u=[],a=t.createGain(),c=t.createGain(),h=t.createOscillator(),d=t.createGain(),l=t.createGain();c.gain.value=r,h.type="sine",h.frequency.value=o,d.gain.value=s;for(var f=0;i>f;f++)n=t.createBiquadFilter(),n.type="allpass",n.frequency.value=1e3*f,f>0&&u[f-1].connect(n),d.connect(n.frequency),u.push(n);var p=u[0],_=u[u.length-1];a.connect(p),a.connect(l),_.connect(l),_.connect(c),c.connect(p),h.connect(d),h.start(0);var g=a;return g.name="Phaser",g._output=l,Object.defineProperties(g,{lfoFrequency:{get:function(){return h.frequency.value},set:function(t){h.frequency.value=t}},lfoGain:{get:function(){return d.gain.value},set:function(t){d.gain.value=t}},feedback:{get:function(){return c.gain.value},set:function(t){c.gain.value=t}}}),g}e.exports=n},{}],12:[function(t,e){"use strict";function n(t,e){var n=[],i=[],o=0,s=0,r=t.createGain(),u=t.createGain(),a=t.createScriptProcessor(4096,2,2);r.connect(a),a.connect(t.destination),a.connect(u);var c=r;c.name="Recorder",c._output=u,c.isRecording=!1;var h=function(){if(!n.length)return t.createBuffer(2,4096,t.sampleRate);var e=t.createBuffer(2,n.length,t.sampleRate);return e.getChannelData(0).set(n),e.getChannelData(1).set(i),e};return c.start=function(){n.length=0,i.length=0,o=t.currentTime,s=0,this.isRecording=!0},c.stop=function(){return s=t.currentTime,this.isRecording=!1,h()},c.getDuration=function(){return this.isRecording?t.currentTime-o:s-o},a.onaudioprocess=function(t){var o=t.inputBuffer.getChannelData(0),s=t.inputBuffer.getChannelData(0),r=t.outputBuffer.getChannelData(0),u=t.outputBuffer.getChannelData(0);if(e&&(r.set(o),u.set(s)),c.isRecording)for(var a=0;a<o.length;a++)n.push(o[a]),i.push(s[a])},c}e.exports=n},{}],13:[function(t,e){"use strict";function n(t,e){e=e||{};var n,i,o=e.time||1,s=e.decay||5,r=!!e.reverse,u=t.sampleRate,a=t.createGain(),c=t.createConvolver(),h=t.createGain();a.connect(c),a.connect(h),c.connect(h);var d=a;return d.name="Reverb",d._output=h,d.update=function(e){void 0!==e.time&&(o=e.time,n=u*o,i=t.createBuffer(2,n,u)),void 0!==e.decay&&(s=e.decay),void 0!==e.reverse&&(r=e.reverse);for(var a,h,d=i.getChannelData(0),l=i.getChannelData(1),f=0;n>f;f++)a=r?n-f:f,h=Math.pow(1-a/n,s),d[f]=(2*Math.random()-1)*h,l[f]=(2*Math.random()-1)*h;c.buffer=i},d.update({time:o,decay:s,reverse:r}),Object.defineProperties(d,{time:{get:function(){return o},set:function(t){t!==o&&this.update({time:o})}},decay:{get:function(){return s},set:function(t){t!==s&&this.update({decay:s})}},reverse:{get:function(){return r},set:function(t){t!==r&&this.update({reverse:!!t})}}}),d}e.exports=n},{}],14:[function(t,e){"use strict";function n(t,e){this._sounds=[],this._context=t,this._effect=new i(this._context),this._gain=this._effect.gain(),this._context&&(this._effect.setSource(this._gain),this._effect.setDestination(e||this._context.destination))}var i=t("./effect.js");n.prototype.add=function(t){t.gain.disconnect(),t.gain.connect(this._gain),this._sounds.push(t)},n.prototype.remove=function(t){this._sounds.some(function(e,n,i){return e===t||e.id===t?(i.splice(n,1),!0):void 0})},n.prototype.play=function(t,e){this._sounds.forEach(function(n){n.play(t,e)})},n.prototype.pause=function(){this._sounds.forEach(function(t){t.playing&&t.pause()})},n.prototype.resume=function(){this._sounds.forEach(function(t){t.paused&&t.play()})},n.prototype.stop=function(){this._sounds.forEach(function(t){t.stop()})},n.prototype.seek=function(t){this._sounds.forEach(function(e){e.seek(t)})},n.prototype.mute=function(){this._preMuteVolume=this.volume,this.volume=0},n.prototype.unMute=function(){this.volume=this._preMuteVolume||1},Object.defineProperty(n.prototype,"volume",{get:function(){return this._gain.gain.value},set:function(t){isNaN(t)||(this._context?(this._gain.gain.cancelScheduledValues(this._context.currentTime),this._gain.gain.value=t,this._gain.gain.setValueAtTime(t,this._context.currentTime)):this._gain.gain.value=t,this._sounds.forEach(function(e){e.context||(e.volume=t)}))}}),n.prototype.fade=function(t,e){if(this._context){var n=this._gain.gain,i=this._context.currentTime;n.cancelScheduledValues(i),n.setValueAtTime(n.value,i),n.linearRampToValueAtTime(t,i+e)}else this._sounds.forEach(function(n){n.fade(t,e)});return this},n.prototype.destroy=function(){for(;this._sounds.length;)this._sounds.pop().destroy()},Object.defineProperties(n.prototype,{effect:{get:function(){return this._effect}},gain:{get:function(){return this._gain}},sounds:{get:function(){return this._sounds}}}),e.exports=n},{"./effect.js":3}],15:[function(t,e){"use strict";function n(t,e){this.id="",this._context=t,this._data=null,this._endedCallback=null,this._isTouchLocked=!1,this._loop=!1,this._pausedAt=0,this._playbackRate=1,this._playWhenReady=null,this._source=null,this._startedAt=0,this._effect=new o(this._context),this._gain=this._effect.gain(),this._context&&(this._effect.setDestination(this._gain),this._gain.connect(e||this._context.destination))}var i=t("./source/buffer-source.js"),o=t("./effect.js"),s=t("./utils/file.js"),r=t("./source/media-source.js"),u=t("./source/microphone-source.js"),a=t("./source/oscillator-source.js"),c=t("./source/script-source.js");n.prototype.play=function(t,e){return!this._source||this._isTouchLocked?(this._playWhenReady=function(){this.play(t,e)}.bind(this),this):(this._playWhenReady=null,this._effect.setSource(this._source.sourceNode),this._source.loop=this._loop,this._context||(this.volume=this._gain.gain.value),this._source.play(t,e),this)},n.prototype.pause=function(){return this._source?(this._source.pause(),this):this},n.prototype.stop=function(){return this._source?(this._source.stop(),this):this},n.prototype.seek=function(t){return this._source?(this.stop(),this.play(0,this._source.duration*t),this):this},n.prototype.fade=function(t,e){if(!this._source)return this;if(this._context){var n=this._gain.gain,i=this._context.currentTime;n.cancelScheduledValues(i),n.setValueAtTime(n.value,i),n.linearRampToValueAtTime(t,i+e)}else"function"==typeof this._source.fade&&this._source.fade(t,e);return this},n.prototype.onEnded=function(t,e){return this._endedCallback=t?t.bind(e||this):null,this},n.prototype._endedHandler=function(){"function"==typeof this._endedCallback&&this._endedCallback(this)},n.prototype.destroy=function(){this._source&&this._source.destroy(),this._effect&&this._effect.destroy(),this._gain&&this._gain.disconnect(),this._gain=null,this._context=null,this._data=null,this._endedCallback=null,this._playWhenReady=null,this._source=null,this._effect=null},n.prototype._createSource=function(t){if(s.isAudioBuffer(t))this._source=new i(t,this._context);else if(s.isMediaElement(t))this._source=new r(t,this._context);else if(s.isMediaStream(t))this._source=new u(t,this._context);else if(s.isOscillatorType(t))this._source=new a(t,this._context);else{if(!s.isScriptConfig(t))throw new Error("Cannot detect data type: "+t);this._source=new c(t,this._context)}this._effect.setSource(this._source.sourceNode),"function"==typeof this._source.onEnded&&this._source.onEnded(this._endedHandler,this),this._playWhenReady&&this._playWhenReady()},Object.defineProperties(n.prototype,{context:{get:function(){return this._context}},currentTime:{get:function(){return this._source?this._source.currentTime:0},set:function(t){this.stop(),this.play(0,t)}},data:{get:function(){return this._data},set:function(t){t&&(this._data=t,this._createSource(this._data))}},duration:{get:function(){return this._source?this._source.duration:0}},effect:{get:function(){return this._effect}},ended:{get:function(){return this._source?this._source.ended:!1}},frequency:{get:function(){return this._source?this._source.frequency:0},set:function(t){this._source&&(this._source.frequency=t)}},gain:{get:function(){return this._gain}},isTouchLocked:{set:function(t){this._isTouchLocked=t,!t&&this._playWhenReady&&this._playWhenReady()}},loop:{get:function(){return this._loop},set:function(t){this._loop=!!t,this._source&&(this._source.loop=this._loop)}},paused:{get:function(){return this._source?this._source.paused:!1}},playing:{get:function(){return this._source?this._source.playing:!1}},playbackRate:{get:function(){return this._playbackRate},set:function(t){this._playbackRate=t,this._source&&(this._source.playbackRate=this._playbackRate)}},progress:{get:function(){return this._source?this._source.progress:0}},volume:{get:function(){return this._context?this._gain.gain.value:this._data&&void 0!==this._data.volume?this._data.volume:1},set:function(t){if(!isNaN(t)){var e=this._gain.gain;if(this._context){var n=this._context.currentTime;e.cancelScheduledValues(n),e.value=t,e.setValueAtTime(t,n)}else e.value=t,this._source&&window.clearTimeout(this._source.fadeTimeout),this._data&&void 0!==this._data.volume&&(this._data.volume=t)}}}}),e.exports=n},{"./effect.js":3,"./source/buffer-source.js":16,"./source/media-source.js":17,"./source/microphone-source.js":18,"./source/oscillator-source.js":19,"./source/script-source.js":20,"./utils/file.js":22}],16:[function(t,e){"use strict";function n(t,e){this.id="",this._buffer=t,this._context=e,this._ended=!1,this._endedCallback=null,this._loop=!1,this._paused=!1,this._pausedAt=0,this._playbackRate=1,this._playing=!1,this._sourceNode=null,this._startedAt=0}n.prototype.play=function(t,e){if(!this._playing){for(void 0===t&&(t=0),t>0&&(t=this._context.currentTime+t),void 0===e&&(e=0),e>0&&(this._pausedAt=0),this._pausedAt>0&&(e=this._pausedAt);e>this.duration;)e%=this.duration;this.sourceNode.loop=this._loop,this.sourceNode.onended=this._endedHandler.bind(this),this.sourceNode.start(t,e),this.sourceNode.playbackRate.value=this._playbackRate,this._startedAt=this._pausedAt?this._context.currentTime-this._pausedAt:this._context.currentTime-e,this._ended=!1,this._paused=!1,this._pausedAt=0,this._playing=!0}},n.prototype.pause=function(){var t=this._context.currentTime-this._startedAt;this.stop(),this._pausedAt=t,this._playing=!1,this._paused=!0},n.prototype.stop=function(){if(this._sourceNode){this._sourceNode.onended=null;try{this._sourceNode.disconnect(),this._sourceNode.stop(0)}catch(t){}this._sourceNode=null}this._paused=!1,this._pausedAt=0,this._playing=!1,this._startedAt=0},n.prototype.onEnded=function(t,e){this._endedCallback=t?t.bind(e||this):null},n.prototype._endedHandler=function(){this.stop(),this._ended=!0,"function"==typeof this._endedCallback&&this._endedCallback(this)},n.prototype.destroy=function(){this.stop(),this._buffer=null,this._context=null,this._endedCallback=null,this._sourceNode=null},Object.defineProperties(n.prototype,{currentTime:{get:function(){if(this._pausedAt)return this._pausedAt;if(this._startedAt){var t=this._context.currentTime-this._startedAt;return t>this.duration&&(t%=this.duration),t}return 0}},duration:{get:function(){return this._buffer?this._buffer.duration:0}},ended:{get:function(){return this._ended}},loop:{get:function(){return this._loop},set:function(t){this._loop=!!t}},paused:{get:function(){return this._paused}},playbackRate:{get:function(){return this._playbackRate},set:function(t){this._playbackRate=t,this._sourceNode&&(this._sourceNode.playbackRate.value=this._playbackRate)}},playing:{get:function(){return this._playing}},progress:{get:function(){return this.duration?this.currentTime/this.duration:0}},sourceNode:{get:function(){return this._sourceNode||(this._sourceNode=this._context.createBufferSource(),this._sourceNode.buffer=this._buffer),this._sourceNode}}}),e.exports=n},{}],17:[function(t,e){"use strict";function n(t,e){this.id="",this._context=e,this._el=t,this._ended=!1,this._endedCallback=null,this._endedHandlerBound=this._endedHandler.bind(this),this._loop=!1,this._paused=!1,this._playbackRate=1,this._playing=!1,this._sourceNode=null
 }n.prototype.play=function(t,e){clearTimeout(this._delayTimeout),this.playbackRate=this._playbackRate,e&&(this._el.currentTime=e),t?this._delayTimeout=setTimeout(this.play.bind(this),t):this._el.play(),this._ended=!1,this._paused=!1,this._playing=!0,this._el.removeEventListener("ended",this._endedHandlerBound),this._el.addEventListener("ended",this._endedHandlerBound,!1)},n.prototype.pause=function(){clearTimeout(this._delayTimeout),this._el&&(this._el.pause(),this._playing=!1,this._paused=!0)},n.prototype.stop=function(){if(clearTimeout(this._delayTimeout),this._el){this._el.pause();try{this._el.currentTime=0,this._el.currentTime>0&&this._el.load()}catch(t){}this._playing=!1,this._paused=!1}},n.prototype.fade=function(t,e){if(!this._el)return this;if(this._context)return this;var n=function(t,e,i){var o=i._el;i.fadeTimeout=setTimeout(function(){return o.volume=o.volume+.2*(t-o.volume),Math.abs(o.volume-t)>.05?n(t,e,i):void(o.volume=t)},1e3*e)};return window.clearTimeout(this.fadeTimeout),n(t,e/10,this),this},n.prototype.onEnded=function(t,e){this._endedCallback=t?t.bind(e||this):null},n.prototype._endedHandler=function(){this._ended=!0,this._paused=!1,this._playing=!1,this._loop?(this._el.currentTime=0,this._el.currentTime>0&&this._el.load(),this.play()):"function"==typeof this._endedCallback&&this._endedCallback(this)},n.prototype.destroy=function(){this.stop(),this._el=null,this._context=null,this._endedCallback=null,this._endedHandlerBound=null,this._sourceNode=null},Object.defineProperties(n.prototype,{currentTime:{get:function(){return this._el?this._el.currentTime:0}},duration:{get:function(){return this._el?this._el.duration:0}},ended:{get:function(){return this._ended}},loop:{get:function(){return this._loop},set:function(t){this._loop=!!t}},paused:{get:function(){return this._paused}},playbackRate:{get:function(){return this._playbackRate},set:function(t){this._playbackRate=t,this._el&&(this._el.playbackRate=this._playbackRate)}},playing:{get:function(){return this._playing}},progress:{get:function(){return this.duration?this.currentTime/this.duration:0}},sourceNode:{get:function(){return!this._sourceNode&&this._context&&(this._sourceNode=this._context.createMediaElementSource(this._el)),this._sourceNode}}}),e.exports=n},{}],18:[function(t,e){"use strict";function n(t,e){this.id="",this._context=e,this._ended=!1,this._paused=!1,this._pausedAt=0,this._playing=!1,this._sourceNode=null,this._startedAt=0,this._stream=t}n.prototype.play=function(t){void 0===t&&(t=0),t>0&&(t=this._context.currentTime+t),this.sourceNode.start(t),this._startedAt=this._pausedAt?this._context.currentTime-this._pausedAt:this._context.currentTime,this._ended=!1,this._playing=!0,this._paused=!1,this._pausedAt=0},n.prototype.pause=function(){var t=this._context.currentTime-this._startedAt;this.stop(),this._pausedAt=t,this._playing=!1,this._paused=!0},n.prototype.stop=function(){if(this._sourceNode){try{this._sourceNode.stop(0)}catch(t){}this._sourceNode=null}this._ended=!0,this._paused=!1,this._pausedAt=0,this._playing=!1,this._startedAt=0},n.prototype.destroy=function(){this.stop(),this._context=null,this._sourceNode=null,this._stream=null,window.mozHack=null},Object.defineProperties(n.prototype,{currentTime:{get:function(){return this._pausedAt?this._pausedAt:this._startedAt?this._context.currentTime-this._startedAt:0}},duration:{get:function(){return 0}},ended:{get:function(){return this._ended}},frequency:{get:function(){return this._frequency},set:function(t){this._frequency=t,this._sourceNode&&(this._sourceNode.frequency.value=t)}},paused:{get:function(){return this._paused}},playing:{get:function(){return this._playing}},progress:{get:function(){return 0}},sourceNode:{get:function(){return this._sourceNode||(this._sourceNode=this._context.createMediaStreamSource(this._stream),navigator.mozGetUserMedia&&(window.mozHack=this._sourceNode)),this._sourceNode}}}),e.exports=n},{}],19:[function(t,e){"use strict";function n(t,e){this.id="",this._context=e,this._ended=!1,this._paused=!1,this._pausedAt=0,this._playing=!1,this._sourceNode=null,this._startedAt=0,this._type=t,this._frequency=200}n.prototype.play=function(t){void 0===t&&(t=0),t>0&&(t=this._context.currentTime+t),this.sourceNode.start(t),this._startedAt=this._pausedAt?this._context.currentTime-this._pausedAt:this._context.currentTime,this._ended=!1,this._playing=!0,this._paused=!1,this._pausedAt=0},n.prototype.pause=function(){var t=this._context.currentTime-this._startedAt;this.stop(),this._pausedAt=t,this._playing=!1,this._paused=!0},n.prototype.stop=function(){if(this._sourceNode){try{this._sourceNode.stop(0)}catch(t){}this._sourceNode=null}this._ended=!0,this._paused=!1,this._pausedAt=0,this._playing=!1,this._startedAt=0},n.prototype.destroy=function(){this.stop(),this._context=null,this._sourceNode=null},Object.defineProperties(n.prototype,{currentTime:{get:function(){return this._pausedAt?this._pausedAt:this._startedAt?this._context.currentTime-this._startedAt:0}},duration:{get:function(){return 0}},ended:{get:function(){return this._ended}},frequency:{get:function(){return this._frequency},set:function(t){this._frequency=t,this._sourceNode&&(this._sourceNode.frequency.value=t)}},paused:{get:function(){return this._paused}},playing:{get:function(){return this._playing}},progress:{get:function(){return 0}},sourceNode:{get:function(){return!this._sourceNode&&this._context&&(this._sourceNode=this._context.createOscillator(),this._sourceNode.type=this._type,this._sourceNode.frequency.value=this._frequency),this._sourceNode}}}),e.exports=n},{}],20:[function(t,e){"use strict";function n(t,e){this.id="",this._bufferSize=t.bufferSize||1024,this._channels=t.channels||1,this._context=e,this._ended=!1,this._onProcess=t.callback.bind(t.thisArg||this),this._paused=!1,this._pausedAt=0,this._playing=!1,this._sourceNode=null,this._startedAt=0}n.prototype.play=function(t){void 0===t&&(t=0),t>0&&(t=this._context.currentTime+t),this.sourceNode.onaudioprocess=this._onProcess,this._startedAt=this._pausedAt?this._context.currentTime-this._pausedAt:this._context.currentTime,this._ended=!1,this._paused=!1,this._pausedAt=0,this._playing=!0},n.prototype.pause=function(){var t=this._context.currentTime-this._startedAt;this.stop(),this._pausedAt=t,this._playing=!1,this._paused=!0},n.prototype.stop=function(){this._sourceNode&&(this._sourceNode.onaudioprocess=this._onPaused),this._ended=!0,this._paused=!1,this._pausedAt=0,this._playing=!1,this._startedAt=0},n.prototype._onPaused=function(t){for(var e=t.outputBuffer,n=0,i=e.numberOfChannels;i>n;n++)for(var o=e.getChannelData(n),s=0,r=o.length;r>s;s++)o[s]=0},n.prototype.destroy=function(){this.stop(),this._context=null,this._onProcess=null,this._sourceNode=null},Object.defineProperties(n.prototype,{currentTime:{get:function(){return this._pausedAt?this._pausedAt:this._startedAt?this._context.currentTime-this._startedAt:0}},duration:{get:function(){return 0}},ended:{get:function(){return this._ended}},paused:{get:function(){return this._paused}},playing:{get:function(){return this._playing}},progress:{get:function(){return 0}},sourceNode:{get:function(){return!this._sourceNode&&this._context&&(this._sourceNode=this._context.createScriptProcessor(this._bufferSize,0,this._channels)),this._sourceNode}}}),e.exports=n},{}],21:[function(t,e){"use strict";var n={};n.handlePageVisibility=function(t,e,n){function i(){document[o]?t.call(n):e.call(n)}var o,s;"undefined"!=typeof document.hidden?(o="hidden",s="visibilitychange"):"undefined"!=typeof document.mozHidden?(o="mozHidden",s="mozvisibilitychange"):"undefined"!=typeof document.msHidden?(o="msHidden",s="msvisibilitychange"):"undefined"!=typeof document.webkitHidden&&(o="webkitHidden",s="webkitvisibilitychange"),void 0!==s&&document.addEventListener(s,i,!1)},n.handleTouchLock=function(t,e){var n=navigator.userAgent,i=!!n.match(/Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i),o=function(){if(document.body.removeEventListener("touchstart",o),this._context){var n=this._context.createBuffer(1,1,22050),i=this._context.createBufferSource();i.buffer=n,i.connect(this._context.destination),i.start(0)}t.call(e)}.bind(this);return i&&document.body.addEventListener("touchstart",o,!1),i},e.exports=n},{}],22:[function(t,e){"use strict";var n={extensions:[],canPlay:{}},i=[{ext:"ogg",type:'audio/ogg; codecs="vorbis"'},{ext:"mp3",type:"audio/mpeg;"},{ext:"opus",type:'audio/ogg; codecs="opus"'},{ext:"wav",type:'audio/wav; codecs="1"'},{ext:"m4a",type:"audio/x-m4a;"},{ext:"m4a",type:"audio/aac;"}],o=document.createElement("audio");o&&i.forEach(function(t){var e=!!o.canPlayType(t.type);e&&n.extensions.push(t.ext),n.canPlay[t.ext]=e}),n.getFileExtension=function(t){t=t.split("?")[0],t=t.substr(t.lastIndexOf("/")+1);var e=t.split(".");return 1===e.length||""===e[0]&&2===e.length?"":e.pop().toLowerCase()},n.getSupportedFile=function(t){var e;return Array.isArray(t)?t.some(function(t){e=t;var n=this.getFileExtension(t);return this.extensions.indexOf(n)>-1},this):"object"==typeof t&&Object.keys(t).some(function(n){e=t[n];var i=this.getFileExtension(e);return this.extensions.indexOf(i)>-1},this),e||t},n.isAudioBuffer=function(t){return!!(t&&window.AudioBuffer&&t instanceof window.AudioBuffer)},n.isMediaElement=function(t){return!!(t&&window.HTMLMediaElement&&t instanceof window.HTMLMediaElement)},n.isMediaStream=function(t){return!!(t&&"function"==typeof t.getAudioTracks&&t.getAudioTracks().length&&window.MediaStreamTrack&&t.getAudioTracks()[0]instanceof window.MediaStreamTrack)},n.isOscillatorType=function(t){return!(!t||"string"!=typeof t||"sine"!==t&&"square"!==t&&"sawtooth"!==t&&"triangle"!==t)},n.isScriptConfig=function(t){return!!(t&&"object"==typeof t&&t.bufferSize&&t.channels&&t.callback)},n.isURL=function(t){return!!(t&&"string"==typeof t&&t.indexOf(".")>-1)},n.containsURL=function(t){if(!t)return!1;var e=t.url||t;return this.isURL(e)||Array.isArray(e)&&this.isURL(e[0])},e.exports=n},{}],23:[function(t,e){"use strict";function n(t){var e,n,o,s,r,u=new i.Signal,a=new i.Signal,c=new i.Signal,h=new i.Signal,d=0,l=function(){e?f():p()},f=function(){o=new XMLHttpRequest,o.open("GET",t,!0),o.responseType="arraybuffer",o.onprogress=function(t){t.lengthComputable&&(d=t.loaded/t.total,u.dispatch(d))},o.onload=function(){e.decodeAudioData(o.response,function(t){r=t,o=null,d=1,u.dispatch(1),a.dispatch(t),c.dispatch(t)},function(t){h.dispatch(t)})},o.onerror=function(t){h.dispatch(t)},o.send()},p=function(){r=new Audio,r.preload="auto",r.src=t,n?(u.dispatch(1),a.dispatch(r),c.dispatch(r)):(window.clearTimeout(s),s=window.setTimeout(_,4e3),r.addEventListener("canplaythrough",_,!1),r.onerror=function(t){window.clearTimeout(s),h.dispatch(t)},r.load())},_=function(){window.clearTimeout(s),r&&(r.removeEventListener("canplaythrough",_),d=1,u.dispatch(1),a.dispatch(r),c.dispatch(r))},g=function(){o&&4!==o.readyState&&o.abort(),r&&"function"==typeof r.removeEventListener&&r.removeEventListener("canplaythrough",_),window.clearTimeout(s)},y=function(){g(),u.removeAll(),c.removeAll(),a.removeAll(),h.removeAll(),o=null,r=null,e=null},v={start:l,cancel:g,destroy:y,onProgress:u,onComplete:c,onBeforeComplete:a,onError:h};return Object.defineProperties(v,{data:{get:function(){return r}},progress:{get:function(){return d}},audioContext:{set:function(t){e=t}},isTouchLocked:{set:function(t){n=t}}}),Object.freeze(v)}var i=t("signals");n.Group=function(){var t=[],e=0,n=0,o=new i.Signal,s=new i.Signal,r=new i.Signal,u=function(e){return t.push(e),n++,e},a=function(){n=t.length,c()},c=function(){if(0===t.length)return void o.dispatch();var e=t.pop();e.onProgress.add(h),e.onBeforeComplete.addOnce(d),e.onError.addOnce(l),e.start()},h=function(t){var i=e+t;s.dispatch(i/n)},d=function(){e++,s.dispatch(e/n),c()},l=function(t){r.dispatch(t),c()};return Object.freeze({add:u,start:a,onProgress:s,onComplete:o,onError:r})},e.exports=n},{signals:2}],24:[function(t,e){"use strict";function n(t,e,n,i){navigator.getUserMedia_=navigator.getUserMedia||navigator.webkitGetUserMedia||navigator.mozGetUserMedia||navigator.msGetUserMedia,this._isSupported=!!navigator.getUserMedia_,this._stream=null,this._onConnected=t.bind(i||this),this._onDenied=e?e.bind(i||this):function(){},this._onError=n?n.bind(i||this):function(){}}n.prototype.connect=function(){if(this._isSupported){var t=this;return navigator.getUserMedia_({audio:!0},function(e){t._stream=e,t._onConnected(e)},function(e){"PermissionDeniedError"===e.name||"PERMISSION_DENIED"===e?t._onDenied():t._onError(e.message||e)}),this}},n.prototype.disconnect=function(){return this._stream&&(this._stream.stop(),this._stream=null),this},Object.defineProperties(n.prototype,{stream:{get:function(){return this._stream}},isSupported:{get:function(){return this._isSupported}}}),e.exports=n},{}],25:[function(t,e){"use strict";function n(t,e){i.call(this,t,e),this._src=null}var i=t("../group.js");n.prototype=Object.create(i.prototype),n.prototype.constructor=n,n.prototype.add=function(t){i.prototype.add.call(this,t),this._getSource()},n.prototype.remove=function(t){i.prototype.remove.call(this,t),this._getSource()},n.prototype._getSource=function(){this._sounds.length&&(this._sounds.sort(function(t,e){return e.duration-t.duration}),this._src=this._sounds[0])},Object.defineProperties(n.prototype,{currentTime:{get:function(){return this._src?this._src.currentTime:0},set:function(t){this.stop(),this.play(0,t)}},duration:{get:function(){return this._src?this._src.duration:0}},loop:{get:function(){return this._loop},set:function(t){this._loop=!!t,this._sounds.forEach(function(t){t.loop=this._loop})}},paused:{get:function(){return this._src?this._src.paused:!1}},progress:{get:function(){return this._src?this._src.progress:0}},playbackRate:{get:function(){return this._playbackRate},set:function(t){this._playbackRate=t,this._sounds.forEach(function(t){t.playbackRate=this._playbackRate})}},playing:{get:function(){return this._src?this._src.playing:!1}}}),e.exports=n},{"../group.js":14}],26:[function(t,e){"use strict";var n=t("./microphone.js"),i=t("./waveform.js"),o={};o.setContext=function(t){this._context=t},o.cloneBuffer=function(t){if(!this._context)return t;for(var e=t.numberOfChannels,n=this._context.createBuffer(e,t.length,t.sampleRate),i=0;e>i;i++)n.getChannelData(i).set(t.getChannelData(i));return n},o.reverseBuffer=function(t){for(var e=t.numberOfChannels,n=0;e>n;n++)Array.prototype.reverse.call(t.getChannelData(n));return t},o.ramp=function(t,e,n,i){this._context&&(t.setValueAtTime(e,this._context.currentTime),t.linearRampToValueAtTime(n,this._context.currentTime+i))},o.getFrequency=function(t){if(!this._context)return 0;var e=40,n=this._context.sampleRate/2,i=Math.log(n/e)/Math.LN2,o=Math.pow(2,i*(t-1));return n*o},o.microphone=function(t,e,i,o){return new n(t,e,i,o)},o.timeCode=function(t,e){void 0===e&&(e=":");var n=Math.floor(t/3600),i=Math.floor(t%3600/60),o=Math.floor(t%3600%60),s=0===n?"":10>n?"0"+n+e:n+e,r=(10>i?"0"+i:i)+e,u=10>o?"0"+o:o;return s+r+u},o.waveform=function(t,e){return new i(t,e)},e.exports=o},{"./microphone.js":24,"./waveform.js":27}],27:[function(t,e){"use strict";function n(){var t,e,n=function(n,i){if(!window.Float32Array||!window.AudioBuffer)return[];var o=n===t,s=e&&e.length===i;if(o&&s)return e;var r=new Float32Array(i),u=Math.floor(n.length/i),a=5,c=Math.floor(u/a),h=0;1>c&&(c=1);for(var d=0,l=n.numberOfChannels;l>d;d++)for(var f=n.getChannelData(d),p=0;i>p;p++)for(var _=p*u,g=_+u;g>_;_+=c){var y=f[_];0>y&&(y=-y),y>r[p]&&(r[p]=y),y>h&&(h=y)}var v=1/h,m=r.length;for(d=0;m>d;d++)r[d]*=v;return t=n,e=r,r},i=function(e){var n,i,o=e.canvas||document.createElement("canvas"),s=e.width||o.width,r=e.height||o.height,u=e.color||"#333333",a=e.bgColor||"#dddddd",c=e.sound?e.sound.data:e.buffer||t,h=this.compute(c,s),d=o.getContext("2d");d.strokeStyle=u,d.fillStyle=a,d.fillRect(0,0,s,r),d.beginPath();for(var l=0;l<h.length;l++)n=l+.5,i=r-Math.round(r*h[l]),d.moveTo(n,i),d.lineTo(n,r);return d.stroke(),o};return Object.freeze({compute:n,draw:i})}e.exports=n},{}]},{},[1])(1)});
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}],8:[function(require,module,exports){
+},{}],12:[function(require,module,exports){
 // SubsceneTerrain.js
 var GL = bongiovi.GL, gl;
 
@@ -17369,7 +19796,7 @@ p.resize = function(e) {
 
 
 module.exports = SubsceneTerrain;
-},{"./ViewNoise":9,"./ViewNormal":10,"./ViewTerrain":11}],9:[function(require,module,exports){
+},{"./ViewNoise":13,"./ViewNormal":14,"./ViewTerrain":15}],13:[function(require,module,exports){
 // ViewNoise.js
 
 var GL = bongiovi.GL;
@@ -17413,7 +19840,7 @@ p.render = function(texture) {
 };
 
 module.exports = ViewNoise;
-},{}],10:[function(require,module,exports){
+},{}],14:[function(require,module,exports){
 // ViewNormal.js
 
 var GL = bongiovi.GL;
@@ -17443,7 +19870,7 @@ p.render = function(texture) {
 };
 
 module.exports = ViewNormal;
-},{}],11:[function(require,module,exports){
+},{}],15:[function(require,module,exports){
 // ViewTerrain.js
 
 var GL = bongiovi.GL;
@@ -17451,7 +19878,7 @@ var gl;
 
 
 function ViewTerrain() {
-	bongiovi.View.call(this, "#define GLSLIFY 1\n#define SHADER_NAME BASIC_VERTEX\n\nprecision highp float;\nattribute vec3 aVertexPosition;\nattribute vec2 aTextureCoord;\n\nuniform mat4 uMVMatrix;\nuniform mat4 uPMatrix;\nuniform vec2 uvOffset;\nuniform float numTiles;\nuniform float size;\nuniform float height;\nuniform float near;\nuniform float far;\nuniform vec3 cameraPos;\n\nuniform sampler2D texture;\n\nvarying float vDepth;\nvarying vec2 vTextureCoord;\nvarying vec3 vEye;\nvarying vec3 vVertex;\n\nfloat getDepth(float z, float n, float f) {\n\treturn (2.0 * n) / (f + n - z*(f-n));\n}\n\n\nvec3 getPosition(vec2 uv) {\n\tvec3 pos = vec3(0.0, 0.0, 0.0);\n\tpos.x = -size/2.0 + uv.x * size;\n\tpos.z = size/2.0 - uv.y * size;\n\n\tfloat h = texture2D(texture, uv).r * height;\n\tpos.y += h;\n\n\treturn pos;\n}\n\n\nfloat map(float value, float sx, float sy, float tx, float ty) {\n\tfloat p = (value - sx) / ( sy - sx);\n\tp = clamp(p, 0.0, 1.0);\n\treturn tx + p * ( ty-tx );\n}\n\n\nvoid main(void) {\n\tvec2 uv       = aTextureCoord / numTiles + uvOffset;\n\tvec3 pos      = getPosition(uv);\n\tpos.y \t\t  += aVertexPosition.y;\n\n\tvec4 mvPosition = uMVMatrix * vec4(pos, 1.0);\n\tvec4 V        = uPMatrix * mvPosition;\n\tgl_Position   = V;\n\t\n\n\tfloat d       = getDepth(V.z/V.w, near, far);\n\tvDepth        = d;\n\tvTextureCoord = uv;\n\tvEye \t\t  = normalize(mvPosition.xyz);\n\tvVertex \t  = pos;\n}", "#define GLSLIFY 1\n// terrain.frag\n\nprecision highp float;\n\nuniform sampler2D textureNormal;\nuniform sampler2D textureNoise;\nuniform vec3 lightColor;\nuniform vec3 lightDir;\nuniform float bumpOffset;\nuniform float albedo;\nuniform float roughness;\nuniform float ambient;\nuniform float shininess;\n\nvarying vec2 vTextureCoord;\nvarying float vDepth;\nvarying vec3 vEye;\nvarying vec3 vVertex;\n\nconst vec3 FOG_COLOR = vec3(243.0, 230.0, 214.0)/255.0;\nconst vec3 FLOOR_COLOR = vec3(230.0, 227.0, 222.0)/255.0;\n\n\nconst float PI = 3.151592657;\n\n\nfloat orenNayarDiffuse(vec3 lightDirection,\tvec3 viewDirection,\tvec3 surfaceNormal, float roughness, float albedo) {\n\n\tfloat LdotV = dot(lightDirection, viewDirection);\n\tfloat NdotL = dot(lightDirection, surfaceNormal);\n\tfloat NdotV = dot(surfaceNormal, viewDirection);\n\n\tfloat s = LdotV - NdotL * NdotV;\n\tfloat t = mix(1.0, max(NdotL, NdotV), step(0.0, s));\n\n\tfloat sigma2 = roughness * roughness;\n\tfloat A = 1.0 + sigma2 * (albedo / (sigma2 + 0.13) + 0.5 / (sigma2 + 0.33));\n\tfloat B = 0.45 * sigma2 / (sigma2 + 0.09);\n\n\treturn albedo * max(0.0, NdotL) * (A + B * s / t) / PI;\n\n}\n\n\n\nfloat gaussianSpecular(vec3 lightDirection, vec3 viewDirection, vec3 surfaceNormal, float shininess) {\n\n\tvec3 H = normalize(lightDirection + viewDirection);\n\tfloat theta = acos(dot(H, surfaceNormal));\n\tfloat w = theta / shininess;\n\treturn exp(-w*w);\n\n}\n \n\nvoid main(void) {\n\tgl_FragColor = vec4(FLOOR_COLOR, 1.0);\n\n\t//\tGET NORMAL\n\tvec3 N       = texture2D(textureNormal, vTextureCoord).rgb;\n\tN            += (texture2D(textureNoise, vTextureCoord*5.0).rgb - vec3(.5))* bumpOffset;\n\tN            = normalize(N);\n\n\t//\tGET LIGHT\n\tvec3 L = normalize(lightDir);\n\n\t//\tDIFFUSE\n\tfloat diffuse = orenNayarDiffuse(L, vEye, N, roughness, albedo);\n\n\t//\tSPECULAR\n\tfloat specular = gaussianSpecular(L, vEye, N, shininess);\n\n\n\tgl_FragColor.rgb *= ambient + lightColor/255.0 * (diffuse + specular);\n\tgl_FragColor.rgb = mix(gl_FragColor.rgb, FOG_COLOR, vDepth);\n\t// gl_FragColor.rgb = vec3(vDepth);\n}");
+	bongiovi.View.call(this, "#define GLSLIFY 1\n#define SHADER_NAME BASIC_VERTEX\n\nprecision highp float;\nattribute vec3 aVertexPosition;\nattribute vec2 aTextureCoord;\n\nuniform mat4 uMVMatrix;\nuniform mat4 uPMatrix;\nuniform vec2 uvOffset;\nuniform float numTiles;\nuniform float size;\nuniform float height;\nuniform float near;\nuniform float far;\nuniform sampler2D texture;\n\nvarying float vDepth;\nvarying vec2 vTextureCoord;\nvarying vec3 vEye;\nvarying vec3 vVertex;\n\nfloat getDepth(float z, float n, float f) {\n\treturn (2.0 * n) / (f + n - z*(f-n));\n}\n\n\nvec3 getPosition(vec2 uv) {\n\tvec3 pos = vec3(0.0, 0.0, 0.0);\n\tpos.x = -size/2.0 + uv.x * size;\n\tpos.z = size/2.0 - uv.y * size;\n\n\tfloat h = texture2D(texture, uv).r * height;\n\tpos.y += h;\n\n\treturn pos;\n}\n\n\nfloat map(float value, float sx, float sy, float tx, float ty) {\n\tfloat p = (value - sx) / ( sy - sx);\n\tp = clamp(p, 0.0, 1.0);\n\treturn tx + p * ( ty-tx );\n}\n\n\nvoid main(void) {\n\tvec2 uv       = aTextureCoord / numTiles + uvOffset;\n\tvec3 pos      = getPosition(uv);\n\tpos.y \t\t  += aVertexPosition.y;\n\n\tvec4 mvPosition = uMVMatrix * vec4(pos, 1.0);\n\tvec4 V        = uPMatrix * mvPosition;\n\tgl_Position   = V;\n\t\n\n\tfloat d       = getDepth(V.z/V.w, near, far);\n\tvDepth        = d;\n\tvTextureCoord = uv;\n\tvEye \t\t  = normalize(mvPosition.xyz);\n\tvVertex \t  = pos;\n}", "#define GLSLIFY 1\n// terrain.frag\n\nprecision highp float;\n\nuniform sampler2D textureNormal;\nuniform sampler2D textureNoise;\nuniform vec3 lightColor;\nuniform vec3 lightDir;\nuniform float bumpOffset;\nuniform float albedo;\nuniform float roughness;\nuniform float ambient;\nuniform float shininess;\nuniform mat3 normalMatrix;\nuniform vec3 cameraPos;\n\nvarying vec2 vTextureCoord;\nvarying float vDepth;\nvarying vec3 vEye;\nvarying vec3 vVertex;\n\nconst vec3 FOG_COLOR = vec3(243.0, 230.0, 214.0)/255.0;\nconst vec3 FLOOR_COLOR = vec3(230.0, 227.0, 222.0)/255.0;\n\n\nconst float PI = 3.151592657;\n\n\nfloat orenNayarDiffuse(vec3 lightDirection,\tvec3 viewDirection,\tvec3 surfaceNormal, float roughness, float albedo) {\n\n\tfloat LdotV = dot(lightDirection, viewDirection);\n\tfloat NdotL = dot(lightDirection, surfaceNormal);\n\tfloat NdotV = dot(surfaceNormal, viewDirection);\n\n\tfloat s = LdotV - NdotL * NdotV;\n\tfloat t = mix(1.0, max(NdotL, NdotV), step(0.0, s));\n\n\tfloat sigma2 = roughness * roughness;\n\tfloat A = 1.0 + sigma2 * (albedo / (sigma2 + 0.13) + 0.5 / (sigma2 + 0.33));\n\tfloat B = 0.45 * sigma2 / (sigma2 + 0.09);\n\n\treturn albedo * max(0.0, NdotL) * (A + B * s / t) / PI;\n\n}\n\n\nfloat gaussianSpecular(vec3 lightDirection, vec3 viewDirection, vec3 surfaceNormal, float shininess) {\n\n\tvec3 H = normalize(lightDirection + viewDirection);\n\tfloat theta = acos(dot(H, surfaceNormal));\n\tfloat w = theta / shininess;\n\treturn exp(-w*w);\n\n}\n\n\nvoid main(void) {\n\tgl_FragColor = vec4(FLOOR_COLOR, 1.0);\n\n\t//\tGET NORMAL\n\tvec3 N       = texture2D(textureNormal, vTextureCoord).rgb;\n\tN            += (texture2D(textureNoise, vTextureCoord*5.0).rgb - vec3(.5))* bumpOffset;\n\tN            = normalize(N);\n\n\t//\tGET LIGHT\n\tvec3 L = normalize(lightDir);\n\n\n\t//\tDIFFUSE\n\tfloat diffuse = orenNayarDiffuse(L, vEye, N, roughness, albedo);\n\n\t//\tSPECULAR\n\tfloat specular = gaussianSpecular(L, vEye, N, shininess);\n\n\n\tgl_FragColor.rgb *= ambient + lightColor/255.0 * (diffuse + specular);\n\tgl_FragColor.rgb = mix(gl_FragColor.rgb, FOG_COLOR, vDepth);\n\t// gl_FragColor.rgb = vec3(vDepth);\n}");
 }
 
 var p = ViewTerrain.prototype = new bongiovi.View();
@@ -17534,4 +19961,4 @@ p.render = function(texture, numTiles, size, uvOffset, textureNormal, textureNoi
 };
 
 module.exports = ViewTerrain;
-},{}]},{},[5]);
+},{}]},{},[9]);

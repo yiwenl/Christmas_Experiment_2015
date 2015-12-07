@@ -1,5 +1,5 @@
 // app.js
-window.bongiovi = require("./libs/bongiovi.js");
+window.bongiovi = require("./libs/bongiovi-post.js");
 window.Sono     = require("./libs/sono.min.js");
 var dat         = require("dat-gui");
 
@@ -17,14 +17,23 @@ window.params = {
 		detailMapScale:3.4,
 		detailMapHeight:.25,
 		noiseScale:.25,
-		lightPos:[1.0, 1.0, 1.0],
+		lightPos:[500.0, 500.0, 500.0],
 		lightColor:[255.0, 255.0, 255.0],
 		bump:.3,
 		shininess:.55,
 		roughness:1.0,
 		albedo:.5,
 		ambient:.6
+	},
+
+
+	post : {
+		enablePostEffect:true,
+		bloomThreshold:.75
 	}
+
+
+
 	
 };
 
@@ -76,6 +85,11 @@ window.params = {
 		fTerrain.add(params.terrain, 'albedo', 0.0, 1.0);
 		fTerrain.add(params.terrain, 'ambient', 0.0, 1.0);
 		fTerrain.add(params.terrain, 'shininess', 0.0, 1.0);
+
+		var fPost = this.gui.addFolder('post effect');
+		fPost.open();
+		fPost.add(params.post, 'enablePostEffect');
+		fPost.add(params.post, 'bloomThreshold', 0.0, 1.0);
 	};
 
 	p._loop = function() {
