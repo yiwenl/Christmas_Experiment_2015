@@ -56,13 +56,13 @@ void main(void) {
 
 	posOffset          = mix(posOffset, posOffsetNext, percent);
 	float r            = atan(posOffset.z, posOffset.x);
-	float rz 		   = sin(time*uvPos.x) * 0.15;
+	float rz 		   = sin(time*mix(uvPos.x, 1.0, .5)) * 0.35;
 	float rotation     = aTextureCoord.x * PI * 2.0 - r;
 	
 	pos.xz             = rotate(pos.xz, rotation);
 	pos.xy             = rotate(pos.xy, rz);
 	vVertex            = vec3(pos);
-	
+
 	pos.y 			   += 250.0;
 	pos                += posOffset;
 	gl_Position        = uPMatrix * uMVMatrix * vec4(pos, 1.0);
