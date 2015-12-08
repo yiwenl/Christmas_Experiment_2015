@@ -1,9 +1,7 @@
 // SceneApp.js
 
 var GL = bongiovi.GL, gl;
-
 var SubsceneLantern = require("./subsceneLantern/SubsceneLantern");
-var SubsceneTerrain = require("./subsceneTerrain/SubsceneTerrain");
 
 function SceneApp() {
 	gl = GL.gl;
@@ -17,10 +15,6 @@ function SceneApp() {
 
 	this.camera._rx.value =  .1;
 	this.camera._ry.value = -.1;
-	this.count = 0;
-	this.percent = 0;
-
-	this.resize();
 }
 
 
@@ -32,35 +26,33 @@ p._initTextures = function() {
 
 p._initViews = function() {
 	console.log('Init Views');
-
-	this._vCopy = new bongiovi.ViewCopy();
+	this._vAxis = new bongiovi.ViewAxis();
+	this._vDotPlane = new bongiovi.ViewDotPlane();
 
 	this._subsceneLantern = new SubsceneLantern(this);
-	this._subsceneTerrain = new SubsceneTerrain(this);
 };
 
 p._update = function() {
 	this._subsceneLantern.update();
 };
 
-
 p.render = function() {
 	this._update();
+
 	GL.clear(0, 0, 0, 0);
 	GL.setMatrices(this.camera);
 	GL.rotate(this.sceneRotation.matrix);
 	GL.setViewport(0, 0, GL.width, GL.height);
 
-	if(params.showLantern)	this._subsceneLantern.render();
-	if(params.showTerrain)	this._subsceneTerrain.render();
-	
-	
-	// GL.setMatrices(this.cameraOtho);
-	// GL.rotate(this.rotationFront);
-	// this._vCopy.render(this._subsceneLantern.getRender());
+	// this._vAxis.render();
+	// this._vDotPlane.render();
+
+	this._subsceneLantern.render();
 };
 
 p.resize = function() {
+	GL.setSize(window.innerWidth, window.innerHeight);
+	this.camera.resize(GL.aspectRatio);
 };
 
 module.exports = SceneApp;
