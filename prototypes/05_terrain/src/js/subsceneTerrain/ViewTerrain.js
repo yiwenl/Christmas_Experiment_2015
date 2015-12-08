@@ -18,7 +18,7 @@ p._init = function() {
 	var coords = [];
 	var indices = []; 
 	var count = 0;
-	var num = 25;
+	var num = 20;
 	var size = 200, uvGap = 1/num;
 
 	function getPosition(i, j) {

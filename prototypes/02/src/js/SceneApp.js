@@ -51,8 +51,10 @@ p.render = function() {
 	GL.setMatrices(this.camera);
 	GL.rotate(this.sceneRotation.matrix);
 	GL.setViewport(0, 0, GL.width, GL.height);
-	this._subsceneTerrain.render();
-	this._subsceneLantern.render();
+
+	if(params.showLantern)	this._subsceneLantern.render();
+	if(params.showTerrain)	this._subsceneTerrain.render();
+	
 	
 	// GL.setMatrices(this.cameraOtho);
 	// GL.rotate(this.rotationFront);

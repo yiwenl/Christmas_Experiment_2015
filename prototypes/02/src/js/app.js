@@ -17,7 +17,11 @@ window.params = {
 	noiseScale:.25,
 	lightPos:[1.0, 1.0, 1.0],
 	lightColor:[255.0, 255.0, 255.0],
-	bump:.3
+	bump:.3,
+
+
+	showLantern:true,
+	showTerrain:true
 };
 
 (function() {
@@ -61,6 +65,8 @@ window.params = {
 		this.gui.add(params, 'density', 0.0, 1.0);
 		this.gui.add(params, 'weight', 0.0, 1.0);
 		this.gui.add(params, 'decay', 0.0, 1.0);
+		this.gui.add(params, 'showLantern');
+		this.gui.add(params, 'showTerrain');
 	};
 
 	p._loop = function() {

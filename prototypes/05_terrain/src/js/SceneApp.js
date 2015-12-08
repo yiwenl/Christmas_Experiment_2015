@@ -14,11 +14,12 @@ function SceneApp() {
 
 	window.addEventListener("resize", this.resize.bind(this));
 
-	this.camera.setPerspective(90 * Math.PI/180, GL.aspectRatio, 5, 4000);
+	this.camera.setPerspective(70 * Math.PI/180, GL.aspectRatio, 5, 4000);
 	this.camera.lockRotation(false);
 	this.sceneRotation.lock(true);
 
 	this.camera._rx.value =  .1;
+	// this.camera._rx.limit(.1, .2);
 	this.camera._ry.value = -.1;
 	this.count = 0;
 	this.percent = 0;

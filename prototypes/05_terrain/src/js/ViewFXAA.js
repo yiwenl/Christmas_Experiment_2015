@@ -5,7 +5,7 @@ var gl;
 var glslify = require("glslify");
 
 function ViewFXAA() {
-	bongiovi.View.call(this, glslify('../shaders/fxaa.vert'), glslify("../shaders/fxaa.frag"));
+	bongiovi.View.call(this, null, glslify("../shaders/fxaa.frag"));
 }
 
 var p = ViewFXAA.prototype = new bongiovi.View();

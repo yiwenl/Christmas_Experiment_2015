@@ -23,7 +23,7 @@ window.params = {
 		shininess:.55,
 		roughness:1.0,
 		albedo:.5,
-		ambient:.6
+		ambient:.8
 	},
 
 
