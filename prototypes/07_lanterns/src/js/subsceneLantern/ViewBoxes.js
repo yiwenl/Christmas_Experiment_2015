@@ -17,11 +17,13 @@ p.constructor = ViewBoxes;
 p._init = function() {
 	gl = GL.gl;
 	var positions = [];
-	var coords = [];
-	var uvs = [];
-	var indices = []; 
-	var normals = [];
-	var count = 0;
+	var coords    = [];
+	var uvs       = [];
+	var indices   = []; 
+	var normals   = [];
+	var count     = 0;
+
+
 	
 
 	function createCube(i, j) {
@@ -29,6 +31,12 @@ p._init = function() {
 		var x = y = z = size;	
 		var ux = i/numParticles;
 		var uy = j/numParticles;
+		var yScale = random(1, 2);
+		// var xzScale = random(1, 2);
+		// x *= xzScale;
+		y *= yScale;
+		// z *= xzScale;
+
 
 
 		// BACK

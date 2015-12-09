@@ -133,7 +133,7 @@ void main(void) {
 			
 			const float posOffset = .01;
 			const float mixOffset = .95;
-			float aRotation = .00025 * mix(extra.x, 1.0, mixOffset);
+			float aRotation = .0001 * mix(extra.x, 1.0, mixOffset);
 			float aRadius   = .01 * mix(extra.y, 1.0, mixOffset);
 			float aY 		= .005 * mix(extra.z, 1.0, mixOffset) + cubicIn(1.0-yOffset) * .05;
 			
