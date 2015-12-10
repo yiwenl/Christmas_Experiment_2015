@@ -39,6 +39,6 @@ vec4 blur9(sampler2D image, vec2 uv, vec2 resolution, vec2 direction) {
 
 void main(void) {
 
-	vec4 texel = blur9(texture, vTextureCoord, resolution, direction);
+	vec4 texel = blur13(texture, vTextureCoord, resolution, direction);
     gl_FragColor = texel;
 }

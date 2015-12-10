@@ -29,6 +29,7 @@ var p = SceneApp.prototype = new bongiovi.Scene();
 p._initTextures = function() {
 	console.log('Init Textures');
 
+	this._textureBg = new bongiovi.GLTexture(images.bg);
 	var renderSize = 1024;
 	// this._fboRender = new bongiovi.FrameBuffer(renderSize, renderSize);
 	this._fboRender = new bongiovi.FrameBuffer(GL.width, GL.height);
@@ -63,6 +64,8 @@ p._initViews = function() {
 	this._composerBlur.addPass(passHBlur);
 	this._composerBlur.addPass(passVBlur);
 	this._composerBlur.addPass(passHBlur);
+	this._composerBlur.addPass(passVBlur);
+	this._composerBlur.addPass(passHBlur);
 };
 
 p._update = function() {
@@ -72,13 +75,18 @@ p._update = function() {
 p.render = function() {
 	this._update();
 
-	GL.clear(0, 0, 0, 0);
-	GL.setMatrices(this.camera);
-	GL.rotate(this.sceneRotation.matrix);
 	GL.setViewport(0, 0, this._fboRender.width, this._fboRender.height);
 
 	this._fboRender.bind();
 	GL.clear(0, 0, 0, 1);
+	gl.disable(gl.DEPTH_TEST);
+	GL.setMatrices(this.cameraOrtho);
+	GL.rotate(this.rotationFront);
+	this._vCopy.render(this._textureBg);
+
+	gl.enable(gl.DEPTH_TEST);
+	GL.setMatrices(this.camera);
+	GL.rotate(this.sceneRotation.matrix);
 	this._subsceneLantern.render();
 	this._subsceneTerrain.render();
 	this._fboRender.unbind();

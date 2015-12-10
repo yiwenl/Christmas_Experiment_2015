@@ -5073,6 +5073,7 @@ var p = SceneApp.prototype = new bongiovi.Scene();
 p._initTextures = function() {
 	console.log('Init Textures');
 
+	this._textureBg = new bongiovi.GLTexture(images.bg);
 	var renderSize = 1024;
 	// this._fboRender = new bongiovi.FrameBuffer(renderSize, renderSize);
 	this._fboRender = new bongiovi.FrameBuffer(GL.width, GL.height);
@@ -5107,6 +5108,8 @@ p._initViews = function() {
 	this._composerBlur.addPass(passHBlur);
 	this._composerBlur.addPass(passVBlur);
 	this._composerBlur.addPass(passHBlur);
+	this._composerBlur.addPass(passVBlur);
+	this._composerBlur.addPass(passHBlur);
 };
 
 p._update = function() {
@@ -5116,13 +5119,18 @@ p._update = function() {
 p.render = function() {
 	this._update();
 
-	GL.clear(0, 0, 0, 0);
-	GL.setMatrices(this.camera);
-	GL.rotate(this.sceneRotation.matrix);
 	GL.setViewport(0, 0, this._fboRender.width, this._fboRender.height);
 
 	this._fboRender.bind();
 	GL.clear(0, 0, 0, 1);
+	gl.disable(gl.DEPTH_TEST);
+	GL.setMatrices(this.cameraOrtho);
+	GL.rotate(this.rotationFront);
+	this._vCopy.render(this._textureBg);
+
+	gl.enable(gl.DEPTH_TEST);
+	GL.setMatrices(this.camera);
+	GL.rotate(this.sceneRotation.matrix);
 	this._subsceneLantern.render();
 	this._subsceneTerrain.render();
 	this._fboRender.unbind();
@@ -5162,7 +5170,7 @@ var gl;
 function ViewBlur(isVertical) {
 	isVertical = isVertical === undefined ? true : isVertical;
 	this._direction = isVertical ? [0, 1] : [1, 0];
-	bongiovi.View.call(this, null, "#define GLSLIFY 1\n// blur.frag\n\n#define SHADER_NAME SIMPLE_TEXTURE\n\nprecision highp float;\nvarying vec2 vTextureCoord;\nuniform vec2 resolution;\nuniform vec2 direction;\nuniform sampler2D texture;\n\n\n\nvec4 blur13(sampler2D image, vec2 uv, vec2 res, vec2 dir) {\n\tvec4 color = vec4(0.0);\n\tvec2 off1 = vec2(1.411764705882353) * dir;\n\tvec2 off2 = vec2(3.2941176470588234) * dir;\n\tvec2 off3 = vec2(5.176470588235294) * dir;\n\tcolor += texture2D(image, uv) * 0.1964825501511404;\n\tcolor += texture2D(image, uv + (off1 / res)) * 0.2969069646728344;\n\tcolor += texture2D(image, uv - (off1 / res)) * 0.2969069646728344;\n\tcolor += texture2D(image, uv + (off2 / res)) * 0.09447039785044732;\n\tcolor += texture2D(image, uv - (off2 / res)) * 0.09447039785044732;\n\tcolor += texture2D(image, uv + (off3 / res)) * 0.010381362401148057;\n\tcolor += texture2D(image, uv - (off3 / res)) * 0.010381362401148057;\n\treturn color;\n}\n\nvec4 blur9(sampler2D image, vec2 uv, vec2 resolution, vec2 direction) {\n  vec4 color = vec4(0.0);\n  vec2 off1 = vec2(1.3846153846) * direction;\n  vec2 off2 = vec2(3.2307692308) * direction;\n  color += texture2D(image, uv) * 0.2270270270;\n  color += texture2D(image, uv + (off1 / resolution)) * 0.3162162162;\n  color += texture2D(image, uv - (off1 / resolution)) * 0.3162162162;\n  color += texture2D(image, uv + (off2 / resolution)) * 0.0702702703;\n  color += texture2D(image, uv - (off2 / resolution)) * 0.0702702703;\n  return color;\n}\n\nvoid main(void) {\n\n\tvec4 texel = blur9(texture, vTextureCoord, resolution, direction);\n    gl_FragColor = texel;\n}");
+	bongiovi.View.call(this, null, "#define GLSLIFY 1\n// blur.frag\n\n#define SHADER_NAME SIMPLE_TEXTURE\n\nprecision highp float;\nvarying vec2 vTextureCoord;\nuniform vec2 resolution;\nuniform vec2 direction;\nuniform sampler2D texture;\n\n\n\nvec4 blur13(sampler2D image, vec2 uv, vec2 res, vec2 dir) {\n\tvec4 color = vec4(0.0);\n\tvec2 off1 = vec2(1.411764705882353) * dir;\n\tvec2 off2 = vec2(3.2941176470588234) * dir;\n\tvec2 off3 = vec2(5.176470588235294) * dir;\n\tcolor += texture2D(image, uv) * 0.1964825501511404;\n\tcolor += texture2D(image, uv + (off1 / res)) * 0.2969069646728344;\n\tcolor += texture2D(image, uv - (off1 / res)) * 0.2969069646728344;\n\tcolor += texture2D(image, uv + (off2 / res)) * 0.09447039785044732;\n\tcolor += texture2D(image, uv - (off2 / res)) * 0.09447039785044732;\n\tcolor += texture2D(image, uv + (off3 / res)) * 0.010381362401148057;\n\tcolor += texture2D(image, uv - (off3 / res)) * 0.010381362401148057;\n\treturn color;\n}\n\nvec4 blur9(sampler2D image, vec2 uv, vec2 resolution, vec2 direction) {\n  vec4 color = vec4(0.0);\n  vec2 off1 = vec2(1.3846153846) * direction;\n  vec2 off2 = vec2(3.2307692308) * direction;\n  color += texture2D(image, uv) * 0.2270270270;\n  color += texture2D(image, uv + (off1 / resolution)) * 0.3162162162;\n  color += texture2D(image, uv - (off1 / resolution)) * 0.3162162162;\n  color += texture2D(image, uv + (off2 / resolution)) * 0.0702702703;\n  color += texture2D(image, uv - (off2 / resolution)) * 0.0702702703;\n  return color;\n}\n\nvoid main(void) {\n\n\tvec4 texel = blur13(texture, vTextureCoord, resolution, direction);\n    gl_FragColor = texel;\n}");
 }
 
 var p = ViewBlur.prototype = new bongiovi.View();
@@ -5222,7 +5230,7 @@ var gl;
 
 function ViewPost() {
 	this.textureBlur = null;
-	bongiovi.View.call(this, null, "#define GLSLIFY 1\n#define SHADER_NAME SIMPLE_TEXTURE\n\nprecision highp float;\nvarying vec2 vTextureCoord;\nuniform sampler2D texture;\nuniform sampler2D textureBlur;\nuniform float bloom;\n\nvoid main(void) {\n    vec4 colorOrg = texture2D(texture, vTextureCoord);\n    vec4 colorBlur = texture2D(textureBlur, vTextureCoord);\n    vec4 color = colorOrg;\n    color.rgb += colorBlur.rgb * bloom;\n    gl_FragColor = color;\n}");
+	bongiovi.View.call(this, null, "#define GLSLIFY 1\n#define SHADER_NAME SIMPLE_TEXTURE\n\nprecision highp float;\nvarying vec2 vTextureCoord;\nuniform sampler2D texture;\nuniform sampler2D textureBlur;\nuniform float bloom;\nuniform float gamma;\n\nvoid main(void) {\n\tvec4 colorOrg  = texture2D(texture, vTextureCoord);\n\tvec4 colorBlur = texture2D(textureBlur, vTextureCoord);\n\tvec4 color     = colorOrg;\n\tcolor.rgb      += colorBlur.rgb * bloom;\n\t\n\t//\tcolor correction\n\tcolor.rgb      = pow(color.rgb, vec3(1.0 / gamma));\n\t\n\tgl_FragColor   = color;\n}");
 }
 
 var p = ViewPost.prototype = new bongiovi.View();
@@ -5244,6 +5252,7 @@ p.render = function(texture) {
 	this.shader.uniform("textureBlur", "uniform1i", 1);
 	this.textureBlur.bind(1);
 	this.shader.uniform("bloom", "uniform1f", params.post.bloom);
+	this.shader.uniform("gamma", "uniform1f", params.post.gamma || 2.2);
 	GL.draw(this.mesh);
 };
 
@@ -5278,7 +5287,8 @@ window.params = {
 
 
 	post: {
-		bloom:.15
+		bloom:.5,
+		gamma:1.2
 	}
 };
 
@@ -5289,7 +5299,7 @@ window.params = {
 		var l = new bongiovi.SimpleImageLoader();
 		var a = [
 			'assets/gold.jpg', 
-			'assets/blue.jpg',
+			'assets/bg.jpg',
 			'assets/paperNormal.jpg',
 			"assets/detailHeight.png",
 			"assets/noise.png",
@@ -5320,6 +5330,7 @@ window.params = {
 
 		this.gui = new dat.GUI({width:300});
 		this.gui.add(params.post, 'bloom', 0, 1.0);
+		this.gui.add(params.post, 'gamma', 0, 3.0);
 
 		require('soundcloud-badge')({
 		    client_id: 'e8b7a335a5321247b38da4ccc07b07a2'
@@ -6070,7 +6081,7 @@ var gl;
 
 
 function ViewTerrain() {
-	bongiovi.View.call(this, "#define GLSLIFY 1\n#define SHADER_NAME BASIC_VERTEX\n\nprecision highp float;\nattribute vec3 aVertexPosition;\nattribute vec2 aTextureCoord;\n\nuniform mat4 uMVMatrix;\nuniform mat4 uPMatrix;\nuniform vec2 uvOffset;\nuniform float numTiles;\nuniform float size;\nuniform float height;\nuniform float near;\nuniform float far;\nuniform sampler2D texture;\n\nvarying float vDepth;\nvarying vec2 vTextureCoord;\nvarying vec3 vEye;\nvarying vec3 vVertex;\n\nfloat getDepth(float z, float n, float f) {\n\treturn (2.0 * n) / (f + n - z*(f-n));\n}\n\n\nvec3 getPosition(vec2 uv) {\n\tvec3 pos = vec3(0.0, 0.0, 0.0);\n\tpos.x = -size/2.0 + uv.x * size;\n\tpos.z = size/2.0 - uv.y * size;\n\n\tfloat h = texture2D(texture, uv).r * height;\n\tpos.y += h;\n\n\treturn pos;\n}\n\n\nfloat map(float value, float sx, float sy, float tx, float ty) {\n\tfloat p = (value - sx) / ( sy - sx);\n\tp = clamp(p, 0.0, 1.0);\n\treturn tx + p * ( ty-tx );\n}\n\n\nvoid main(void) {\n\tvec2 uv       = aTextureCoord / numTiles + uvOffset;\n\tvec3 pos      = getPosition(uv);\n\tpos.y \t\t  += aVertexPosition.y - 100.0;\n\n\tvec4 mvPosition = uMVMatrix * vec4(pos, 1.0);\n\tvec4 V        = uPMatrix * mvPosition;\n\tgl_Position   = V;\n\t\n\n\tfloat d       = getDepth(V.z/V.w, near, far);\n\tvDepth        = d;\n\tvTextureCoord = uv;\n\tvEye \t\t  = normalize(mvPosition.xyz);\n\tvVertex \t  = pos;\n}", "#define GLSLIFY 1\n// terrain.frag\n\nprecision highp float;\n\nuniform sampler2D textureNormal;\nuniform sampler2D textureNoise;\nuniform vec3 lightColor;\nuniform vec3 lightDir;\nuniform float bumpOffset;\nuniform float albedo;\nuniform float roughness;\nuniform float ambient;\nuniform float shininess;\nuniform mat3 normalMatrix;\nuniform vec3 cameraPos;\n\nvarying vec2 vTextureCoord;\nvarying float vDepth;\nvarying vec3 vEye;\nvarying vec3 vVertex;\n\nconst vec3 FOG_COLOR = vec3(243.0, 230.0, 214.0)/255.0;\nconst vec3 FLOOR_COLOR = vec3(230.0, 227.0, 222.0)/255.0;\n\n\nconst float PI = 3.151592657;\n\n\nfloat orenNayarDiffuse(vec3 lightDirection,\tvec3 viewDirection,\tvec3 surfaceNormal, float roughness, float albedo) {\n\n\tfloat LdotV = dot(lightDirection, viewDirection);\n\tfloat NdotL = dot(lightDirection, surfaceNormal);\n\tfloat NdotV = dot(surfaceNormal, viewDirection);\n\n\tfloat s = LdotV - NdotL * NdotV;\n\tfloat t = mix(1.0, max(NdotL, NdotV), step(0.0, s));\n\n\tfloat sigma2 = roughness * roughness;\n\tfloat A = 1.0 + sigma2 * (albedo / (sigma2 + 0.13) + 0.5 / (sigma2 + 0.33));\n\tfloat B = 0.45 * sigma2 / (sigma2 + 0.09);\n\n\treturn albedo * max(0.0, NdotL) * (A + B * s / t) / PI;\n\n}\n\n\nfloat gaussianSpecular(vec3 lightDirection, vec3 viewDirection, vec3 surfaceNormal, float shininess) {\n\n\tvec3 H = normalize(lightDirection + viewDirection);\n\tfloat theta = acos(dot(H, surfaceNormal));\n\tfloat w = theta / shininess;\n\treturn exp(-w*w);\n\n}\n\n\nvoid main(void) {\n\tgl_FragColor = vec4(FLOOR_COLOR, 1.0);\n\n\t//\tGET NORMAL\n\tvec3 N       = texture2D(textureNormal, vTextureCoord).rgb;\n\tN            += (texture2D(textureNoise, vTextureCoord*5.0).rgb - vec3(.5))* bumpOffset;\n\tN            = normalize(N);\n\n\t//\tGET LIGHT\n\tvec3 L = normalize(lightDir);\n\n\n\t//\tDIFFUSE\n\tfloat diffuse = orenNayarDiffuse(L, vEye, N, roughness, albedo);\n\n\t//\tSPECULAR\n\tfloat specular = gaussianSpecular(L, vEye, N, shininess) * .25;\n\n\n\tgl_FragColor.rgb *= ambient + lightColor/255.0 * (diffuse + specular);\n\tgl_FragColor.rgb = mix(gl_FragColor.rgb, FOG_COLOR, vDepth);\n\n\n\tfloat maxRange = 1100.0;\n\tfloat range = 300.0;\n\tfloat d = length(vVertex);\n\tfloat a = smoothstep(maxRange-range, maxRange, d);\n\tgl_FragColor *= (1.0 - a);\n\t// gl_FragColor.rgb = vec3(vDepth);\n}");
+	bongiovi.View.call(this, "#define GLSLIFY 1\n#define SHADER_NAME BASIC_VERTEX\n\nprecision highp float;\nattribute vec3 aVertexPosition;\nattribute vec2 aTextureCoord;\n\nuniform mat4 uMVMatrix;\nuniform mat4 uPMatrix;\nuniform vec2 uvOffset;\nuniform float numTiles;\nuniform float size;\nuniform float height;\nuniform float near;\nuniform float far;\nuniform sampler2D texture;\n\nvarying float vDepth;\nvarying vec2 vTextureCoord;\nvarying vec3 vEye;\nvarying vec3 vVertex;\n\nfloat getDepth(float z, float n, float f) {\n\treturn (2.0 * n) / (f + n - z*(f-n));\n}\n\n\nvec3 getPosition(vec2 uv) {\n\tvec3 pos = vec3(0.0, 0.0, 0.0);\n\tpos.x = -size/2.0 + uv.x * size;\n\tpos.z = size/2.0 - uv.y * size;\n\n\tfloat h = texture2D(texture, uv).r * height;\n\tpos.y += h;\n\n\treturn pos;\n}\n\n\nfloat map(float value, float sx, float sy, float tx, float ty) {\n\tfloat p = (value - sx) / ( sy - sx);\n\tp = clamp(p, 0.0, 1.0);\n\treturn tx + p * ( ty-tx );\n}\n\n\nvoid main(void) {\n\tvec2 uv       = aTextureCoord / numTiles + uvOffset;\n\tvec3 pos      = getPosition(uv);\n\tpos.y \t\t  += aVertexPosition.y - 100.0;\n\n\tvec4 mvPosition = uMVMatrix * vec4(pos, 1.0);\n\tvec4 V        = uPMatrix * mvPosition;\n\tgl_Position   = V;\n\t\n\n\tfloat d       = getDepth(V.z/V.w, near, far);\n\tvDepth        = d;\n\tvTextureCoord = uv;\n\tvEye \t\t  = normalize(mvPosition.xyz);\n\tvVertex \t  = pos;\n}", "#define GLSLIFY 1\n// terrain.frag\n\nprecision highp float;\n\nuniform sampler2D textureNormal;\nuniform sampler2D textureNoise;\nuniform vec3 lightColor;\nuniform vec3 lightDir;\nuniform float bumpOffset;\nuniform float albedo;\nuniform float roughness;\nuniform float ambient;\nuniform float shininess;\nuniform mat3 normalMatrix;\nuniform vec3 cameraPos;\n\nvarying vec2 vTextureCoord;\nvarying float vDepth;\nvarying vec3 vEye;\nvarying vec3 vVertex;\n\nconst vec3 FOG_COLOR = vec3(243.0, 230.0, 214.0)/255.0;\nconst vec3 FLOOR_COLOR = vec3(230.0, 227.0, 222.0)/255.0;\n\n\nconst float PI = 3.151592657;\n\n\nfloat orenNayarDiffuse(vec3 lightDirection,\tvec3 viewDirection,\tvec3 surfaceNormal, float roughness, float albedo) {\n\n\tfloat LdotV = dot(lightDirection, viewDirection);\n\tfloat NdotL = dot(lightDirection, surfaceNormal);\n\tfloat NdotV = dot(surfaceNormal, viewDirection);\n\n\tfloat s = LdotV - NdotL * NdotV;\n\tfloat t = mix(1.0, max(NdotL, NdotV), step(0.0, s));\n\n\tfloat sigma2 = roughness * roughness;\n\tfloat A = 1.0 + sigma2 * (albedo / (sigma2 + 0.13) + 0.5 / (sigma2 + 0.33));\n\tfloat B = 0.45 * sigma2 / (sigma2 + 0.09);\n\n\treturn albedo * max(0.0, NdotL) * (A + B * s / t) / PI;\n\n}\n\n\nfloat gaussianSpecular(vec3 lightDirection, vec3 viewDirection, vec3 surfaceNormal, float shininess) {\n\n\tvec3 H = normalize(lightDirection + viewDirection);\n\tfloat theta = acos(dot(H, surfaceNormal));\n\tfloat w = theta / shininess;\n\treturn exp(-w*w);\n\n}\n\n\nvoid main(void) {\n\tgl_FragColor = vec4(FLOOR_COLOR, 1.0);\n\n\t//\tGET NORMAL\n\tvec3 N       = texture2D(textureNormal, vTextureCoord).rgb;\n\tN            += (texture2D(textureNoise, vTextureCoord*5.0).rgb - vec3(.5))* bumpOffset;\n\tN            = normalize(N);\n\n\t//\tGET LIGHT\n\tvec3 L = normalize(lightDir);\n\n\n\t//\tDIFFUSE\n\tfloat diffuse = orenNayarDiffuse(L, vEye, N, roughness, albedo);\n\n\t//\tSPECULAR\n\tfloat specular = gaussianSpecular(L, vEye, N, shininess) * .25;\n\n\n\tgl_FragColor.rgb *= ambient + lightColor/255.0 * (diffuse + specular);\n\tgl_FragColor.rgb = mix(gl_FragColor.rgb, FOG_COLOR, vDepth);\n\n\n\t// float maxRange = 1100.0;\n\t// float range = 300.0;\n\t// float d = length(vVertex);\n\t// float a = smoothstep(maxRange-range, maxRange, d);\n\t// gl_FragColor *= (1.0 - a);\n\t// gl_FragColor.rgb = vec3(vDepth);\n}");
 }
 
 var p = ViewTerrain.prototype = new bongiovi.View();

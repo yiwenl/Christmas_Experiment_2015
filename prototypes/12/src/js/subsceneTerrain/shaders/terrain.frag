@@ -77,10 +77,10 @@ void main(void) {
 	gl_FragColor.rgb = mix(gl_FragColor.rgb, FOG_COLOR, vDepth);
 
 
-	float maxRange = 1100.0;
-	float range = 300.0;
-	float d = length(vVertex);
-	float a = smoothstep(maxRange-range, maxRange, d);
-	gl_FragColor *= (1.0 - a);
+	// float maxRange = 1100.0;
+	// float range = 300.0;
+	// float d = length(vVertex);
+	// float a = smoothstep(maxRange-range, maxRange, d);
+	// gl_FragColor *= (1.0 - a);
 	// gl_FragColor.rgb = vec3(vDepth);
 }

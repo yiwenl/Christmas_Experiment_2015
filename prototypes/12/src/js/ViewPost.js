@@ -28,6 +28,7 @@ p.render = function(texture) {
 	this.shader.uniform("textureBlur", "uniform1i", 1);
 	this.textureBlur.bind(1);
 	this.shader.uniform("bloom", "uniform1f", params.post.bloom);
+	this.shader.uniform("gamma", "uniform1f", params.post.gamma || 2.2);
 	GL.draw(this.mesh);
 };
 

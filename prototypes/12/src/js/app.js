@@ -27,7 +27,8 @@ window.params = {
 
 
 	post: {
-		bloom:.15
+		bloom:.5,
+		gamma:1.2
 	}
 };
 
@@ -38,7 +39,7 @@ window.params = {
 		var l = new bongiovi.SimpleImageLoader();
 		var a = [
 			'assets/gold.jpg', 
-			'assets/blue.jpg',
+			'assets/bg.jpg',
 			'assets/paperNormal.jpg',
 			"assets/detailHeight.png",
 			"assets/noise.png",
@@ -69,6 +70,7 @@ window.params = {
 
 		this.gui = new dat.GUI({width:300});
 		this.gui.add(params.post, 'bloom', 0, 1.0);
+		this.gui.add(params.post, 'gamma', 0, 3.0);
 
 		require('soundcloud-badge')({
 		    client_id: 'e8b7a335a5321247b38da4ccc07b07a2'
