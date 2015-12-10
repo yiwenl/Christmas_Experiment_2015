@@ -3,9 +3,9 @@ window.bongiovi = require("./libs/bongiovi.js");
 var dat = require("dat-gui");
 
 window.params = {
-	yDistance:50,
-	numPortraits:6,
-	z:200,
+	yDistance:29,
+	numPortraits:9,
+	z:285,
 	density:.25,
 	weight:.1,
 	decay:.85
@@ -21,7 +21,8 @@ window.params = {
 					"assets/01.jpg",
 					"assets/02.jpg",
 					"assets/03.jpg",
-					"assets/04.jpg"
+					"assets/04.jpg",
+					"assets/05.jpg"
 				];
 
 
@@ -53,7 +54,7 @@ window.params = {
 
 		this.gui = new dat.GUI({width:300});
 		this.gui.add(params, 'z', 30.0, 350.0);
-		this.gui.add(params, 'yDistance', 30.0, 350.0);
+		this.gui.add(params, 'yDistance', 0.0, 100.0);
 		this.gui.add(params, 'density', 0.0, 1.0);
 		this.gui.add(params, 'weight', 0.0, 1.0);
 		this.gui.add(params, 'decay', 0.0, 1.0);

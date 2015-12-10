@@ -51,7 +51,8 @@ window.params = {
 
 		require('soundcloud-badge')({
 		    client_id: 'e8b7a335a5321247b38da4ccc07b07a2'
-		  , song: 'https://soundcloud.com/rsheehan/rhian-sheehan-la-bo-te-musique'
+		  // , song: 'https://soundcloud.com/rsheehan/rhian-sheehan-la-bo-te-musique'
+		  , song: 'https://soundcloud.com/dee-san/oscillate-01'
 		  , dark: false
 		  , getFonts: true
 		}, function(err, src, data, div) {
