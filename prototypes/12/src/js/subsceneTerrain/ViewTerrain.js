@@ -59,7 +59,7 @@ p._init = function() {
 	this.mesh.bufferIndices(indices);
 };
 
-p.render = function(texture, numTiles, size, uvOffset, textureNormal, textureNoise, camera) {
+p.render = function(texture, numTiles, size, uvOffset, textureNormal, textureNoise, camera, textureEnv) {
 	this.shader.bind();
 
 	this.shader.uniform("size", "uniform1f", size);
@@ -70,6 +70,7 @@ p.render = function(texture, numTiles, size, uvOffset, textureNormal, textureNoi
 	this.shader.uniform("roughness", "uniform1f", params.terrain.roughness);
 	this.shader.uniform("albedo", "uniform1f", params.terrain.albedo);
 	this.shader.uniform("ambient", "uniform1f", params.terrain.ambient);
+	this.shader.uniform("gamma", "uniform1f", params.post.gamma);
 	this.shader.uniform("shininess", "uniform1f", params.terrain.shininess);
 	this.shader.uniform("lightDir", "uniform3fv", params.terrain.lightPos);
 	this.shader.uniform("lightColor", "uniform3fv", params.terrain.lightColor);
@@ -80,6 +81,8 @@ p.render = function(texture, numTiles, size, uvOffset, textureNormal, textureNoi
 	textureNormal.bind(1);
 	this.shader.uniform("textureNoise", "uniform1i", 2);
 	textureNoise.bind(2);
+	this.shader.uniform("textureEnv", "uniform1i", 3);
+	textureEnv.bind(3);
 	if(camera) {
 		this.shader.uniform("near", "uniform1f", camera.near);
 		this.shader.uniform("far", "uniform1f", camera.far);

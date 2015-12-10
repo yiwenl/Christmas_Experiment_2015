@@ -8,6 +8,7 @@ var SubsceneTerrain = require("./subsceneTerrain/SubsceneTerrain");
 var ViewFXAA = require("./ViewFXAA");
 var ViewBlur = require("./ViewBlur");
 var ViewPost = require("./ViewPost");
+var ViewBg = require("./ViewBg");
 
 function SceneApp() {
 	gl = GL.gl;
@@ -30,14 +31,18 @@ p._initTextures = function() {
 	console.log('Init Textures');
 
 	this._textureBg = new bongiovi.GLTexture(images.bg);
+	this._textureBg1 = new bongiovi.GLTexture(images.bg3);
+	this._textureBg2 = new bongiovi.GLTexture(images.bg2);
 	var renderSize = 1024;
 	// this._fboRender = new bongiovi.FrameBuffer(renderSize, renderSize);
 	this._fboRender = new bongiovi.FrameBuffer(GL.width, GL.height);
+	this._fboBg = new bongiovi.FrameBuffer(renderSize, renderSize/2);
 };
 
 p._initViews = function() {
 	console.log('Init Views');
 	this._vCopy = new  bongiovi.ViewCopy();
+	this._vBg = new ViewBg();
 	this._subsceneLantern = new SubsceneLantern(this);
 	this._subsceneTerrain = new SubsceneTerrain(this);
 
@@ -75,20 +80,28 @@ p._update = function() {
 p.render = function() {
 	this._update();
 
+	GL.setMatrices(this.cameraOrtho);
+	GL.rotate(this.rotationFront);
+
+	GL.setViewport(0, 0, this._fboBg.width, this._fboBg.height);
+	this._fboBg.bind();
+	GL.clear(0, 0, 0, 0);
+	this._vBg.render(this._textureBg1, this._textureBg2);
+	this._fboBg.unbind();
+	
+
 	GL.setViewport(0, 0, this._fboRender.width, this._fboRender.height);
 
 	this._fboRender.bind();
 	GL.clear(0, 0, 0, 1);
 	gl.disable(gl.DEPTH_TEST);
-	GL.setMatrices(this.cameraOrtho);
-	GL.rotate(this.rotationFront);
-	this._vCopy.render(this._textureBg);
+	this._vCopy.render(this._fboBg.getTexture());
 
 	gl.enable(gl.DEPTH_TEST);
 	GL.setMatrices(this.camera);
 	GL.rotate(this.sceneRotation.matrix);
-	this._subsceneLantern.render();
-	this._subsceneTerrain.render();
+	this._subsceneLantern.render(this._fboBg.getTexture());
+	this._subsceneTerrain.render(this._fboBg.getTexture());
 	this._fboRender.unbind();
 
 	GL.setViewport(0, 0, GL.width, GL.height);

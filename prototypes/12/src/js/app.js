@@ -22,13 +22,14 @@ window.params = {
 		shininess:.55,
 		roughness:1.0,
 		albedo:.5,
-		ambient:.48
+		ambient:.28
 	},
 
 
 	post: {
-		bloom:.5,
-		gamma:1.2
+		bloom:.25,
+		gamma:1.2,
+		bgOffset:0
 	}
 };
 
@@ -40,6 +41,9 @@ window.params = {
 		var a = [
 			'assets/gold.jpg', 
 			'assets/bg.jpg',
+			'assets/bg1.jpg',
+			'assets/bg2.jpg',
+			'assets/bg3.jpg',
 			'assets/paperNormal.jpg',
 			"assets/detailHeight.png",
 			"assets/noise.png",
@@ -69,9 +73,10 @@ window.params = {
 		bongiovi.Scheduler.addEF(this, this._loop);
 
 		this.gui = new dat.GUI({width:300});
+		this.gui.add(params.post, 'bgOffset', 0, 1.0);
 		this.gui.add(params.post, 'bloom', 0, 1.0);
 		this.gui.add(params.post, 'gamma', 0, 3.0);
-
+//*/
 		require('soundcloud-badge')({
 		    client_id: 'e8b7a335a5321247b38da4ccc07b07a2'
 		  // , song: 'https://soundcloud.com/rsheehan/rhian-sheehan-la-bo-te-musique'
@@ -79,21 +84,14 @@ window.params = {
 		  , dark: false
 		  , getFonts: true
 		}, function(err, src, data, div) {
-		  if (err) throw err
-
-		  // Play the song on
-		  // a modern browser
+		  if (err) throw err;
 		  var audio = new Audio
 		  audio.src = src
 		  audio.play()
 		  audio.loop = true;
 		  audio.volume = 0;
-
-		  // Metadata related to the song
-		  // retrieved by the API.
-		  console.log(audio);
-		  console.log(data)
 		});
+//*/		
 	};
 
 	p._loop = function() {

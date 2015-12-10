@@ -4,6 +4,7 @@ precision highp float;
 
 uniform sampler2D textureNormal;
 uniform sampler2D textureNoise;
+uniform sampler2D textureEnv;
 uniform vec3 lightColor;
 uniform vec3 lightDir;
 uniform float bumpOffset;
@@ -11,6 +12,7 @@ uniform float albedo;
 uniform float roughness;
 uniform float ambient;
 uniform float shininess;
+uniform float gamma;
 uniform mat3 normalMatrix;
 uniform vec3 cameraPos;
 
@@ -24,7 +26,7 @@ const vec3 FLOOR_COLOR = vec3(230.0, 227.0, 222.0)/255.0;
 
 
 const float PI = 3.151592657;
-
+const float TwoPI = PI * 2.0;
 
 float orenNayarDiffuse(vec3 lightDirection,	vec3 viewDirection,	vec3 surfaceNormal, float roughness, float albedo) {
 
@@ -53,6 +55,20 @@ float gaussianSpecular(vec3 lightDirection, vec3 viewDirection, vec3 surfaceNorm
 
 }
 
+vec2 envMapEquirect(vec3 wcNormal, float flipEnvMap) {
+  //I assume envMap texture has been flipped the WebGL way (pixel 0,0 is a the bottom)
+  //therefore we flip wcNorma.y as acos(1) = 0
+  float phi = acos(-wcNormal.y);
+  float theta = atan(flipEnvMap * wcNormal.x, wcNormal.z) + PI;
+  return vec2(theta / TwoPI, phi / PI);
+}
+
+vec2 envMapEquirect(vec3 wcNormal) {
+    //-1.0 for left handed coordinate system oriented texture (usual case)
+    return envMapEquirect(wcNormal, -1.0);
+}
+
+
 
 void main(void) {
 	gl_FragColor = vec4(FLOOR_COLOR, 1.0);
@@ -72,8 +88,16 @@ void main(void) {
 	//	SPECULAR
 	float specular = gaussianSpecular(L, vEye, N, shininess) * .25;
 
+	//	ENV LIGHT
+	vec2 uvEnv = envMapEquirect(N);
+	vec3 colorEnv = texture2D(textureEnv, uvEnv).rgb;
 
-	gl_FragColor.rgb *= ambient + lightColor/255.0 * (diffuse + specular);
+
+	gl_FragColor.rgb = ambient + lightColor/255.0 * (diffuse + specular);
+
+
+	gl_FragColor.rgb += colorEnv*.3;
+	gl_FragColor.rgb = pow(gl_FragColor.rgb, vec3(1.0 / gamma));
 	gl_FragColor.rgb = mix(gl_FragColor.rgb, FOG_COLOR, vDepth);
 
 

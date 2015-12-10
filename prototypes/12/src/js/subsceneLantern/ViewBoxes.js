@@ -230,8 +230,6 @@ p._init = function() {
 		}
 	}
 
-	console.log(positions.length, indices.length);
-
 	this.mesh = new bongiovi.Mesh(positions.length, indices.length, GL.gl.TRIANGLES);
 	this.mesh.bufferVertex(positions);
 	this.mesh.bufferTexCoords(coords);
@@ -240,7 +238,7 @@ p._init = function() {
 	this.mesh.bufferData(uvs, "aUV", 2);
 };
 
-p.render = function(texture, textureNext, textureMap, percent, textureNormal) {
+p.render = function(texture, textureNext, textureMap, percent, textureNormal, textureEnv) {
 	this.count += .1;
 	this.shader.bind();
 	this.shader.uniform("texture", "uniform1i", 0);
@@ -251,6 +249,8 @@ p.render = function(texture, textureNext, textureMap, percent, textureNormal) {
 	textureMap.bind(2);
 	this.shader.uniform("textureNormal", "uniform1i", 3);
 	textureNormal.bind(3);
+	this.shader.uniform("textureEnv", "uniform1i", 4);
+	textureEnv.bind(4);
 	this.shader.uniform("time", "uniform1f", this.count);
 	this.shader.uniform("gamma", "uniform1f", params.gamma);
 	this.shader.uniform("percent", "uniform1f", percent);

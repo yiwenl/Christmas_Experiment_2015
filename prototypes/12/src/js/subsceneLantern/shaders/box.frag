@@ -13,9 +13,10 @@ varying vec2 vUV;
 uniform float gamma;
 uniform sampler2D textureMap;
 uniform sampler2D textureNormal;
+uniform sampler2D textureEnv;
 // const float gamma = 2.2;
 const float PI = 3.141592657;
-
+const float TwoPI = PI * 2.0;
 
 float diffuse(vec3 lightPos, vec3 normal) {
 	float d = max(dot(normal, normalize(lightPos)), 0.0);
@@ -25,6 +26,20 @@ float diffuse(vec3 lightPos, vec3 normal) {
 
 vec3 diffuse(vec3 lightPos, vec3 lightColor, vec3 normal) {
 	return diffuse(lightPos, normal) * lightColor;
+}
+
+
+vec2 envMapEquirect(vec3 wcNormal, float flipEnvMap) {
+  //I assume envMap texture has been flipped the WebGL way (pixel 0,0 is a the bottom)
+  //therefore we flip wcNorma.y as acos(1) = 0
+  float phi = acos(-wcNormal.y);
+  float theta = atan(flipEnvMap * wcNormal.x, wcNormal.z) + PI;
+  return vec2(theta / TwoPI, phi / PI);
+}
+
+vec2 envMapEquirect(vec3 wcNormal) {
+    //-1.0 for left handed coordinate system oriented texture (usual case)
+    return envMapEquirect(wcNormal, -1.0);
 }
 
 const vec3 LIGHT = vec3(1.0, 10.0, 10.0);
@@ -53,11 +68,15 @@ void main(void) {
 
 	vec3 color = texture2D(textureMap, uv).rgb;
 	color *= g*t+diff;
-	color *= 2.15;
+	color *= 1.5;
 	color *= color;
 
+	vec2 uvEnv = envMapEquirect(N);
+	vec3 colorEnv = texture2D(textureEnv, uvEnv).rgb;
 	color = pow(color, vec3(1.0 / gamma));
+	color += colorEnv * .25;
     gl_FragColor = vec4(color, 1.0);
+    gl_FragColor = vec4(colorEnv, 1.0);
     // gl_FragColor = vec4(N * .5 + .5, 1.0);
     // gl_FragColor = texture2D(textureNormal, vUV);
 }

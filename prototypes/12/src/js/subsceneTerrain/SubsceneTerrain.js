@@ -57,7 +57,7 @@ p._initViews = function() {
 };
 
 
-p.render = function() {
+p.render = function(textureEnv) {
 	// GL.setMatrices(this.cameraOtho);
 	// GL.rotate(this.rotationFront);
 
@@ -69,7 +69,7 @@ p.render = function() {
 	for(var j=0; j<numTiles; j++) {
 		for(var i=0; i<numTiles; i++) {
 			var uvOffset = [i/numTiles, j/numTiles];
-			this._vTerrain.render(this._fboNoise.getTexture(), numTiles, size, uvOffset, this._fboNormal.getTexture(), this._textureNoise, this.camera);
+			this._vTerrain.render(this._fboNoise.getTexture(), numTiles, size, uvOffset, this._fboNormal.getTexture(), this._textureNoise, this.camera, textureEnv);
 		}
 	}
 };

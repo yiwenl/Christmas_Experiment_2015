@@ -39,12 +39,6 @@ p._initTextures = function() {
 	this._fboCurrent 	= new bongiovi.FrameBuffer(num*2, num*2, o);
 	this._fboTarget 	= new bongiovi.FrameBuffer(num*2, num*2, o);
 
-
-	// this._fboRender = new bongiovi.FrameBuffer(GL.width, GL.height);
-	this._fboRender = new bongiovi.FrameBuffer(1024/4, 1024/4);
-	var sizeBlur = 64;
-	this._fboBlur0  = new bongiovi.FrameBuffer(sizeBlur, sizeBlur);
-	this._fboBlur1  = new bongiovi.FrameBuffer(sizeBlur, sizeBlur);
 };
 
 p._initViews = function() {
@@ -94,11 +88,8 @@ p.update = function() {
 };
 
 
-p.render = function() {
-	// GL.setViewport(0, 0, this._fboRender.width, this._fboRender.height);
-	// this._fboRender.bind();
-	// GL.clear(0, 0, 0, 0);	
-	this._vBoxes.render(this._fboTarget.getTexture(), this._fboCurrent.getTexture(), this._texture, this.percent, this._textureNormal);
+p.render = function(textureEnv) {
+	this._vBoxes.render(this._fboTarget.getTexture(), this._fboCurrent.getTexture(), this._texture, this.percent, this._textureNormal, textureEnv);
 };
 
 
@@ -109,11 +100,6 @@ p.resize = function() {
 	this.camera.resize(GL.aspectRatio);
 
 	this._fboRender = new bongiovi.FrameBuffer(GL.width, GL.height);
-	// this._fboRender = new bongiovi.FrameBuffer(1024, 1024);
-
-	var sizeBlur = 512;
-	this._fboBlur0 = new bongiovi.FrameBuffer(sizeBlur, sizeBlur);
-	this._fboBlur1 = new bongiovi.FrameBuffer(sizeBlur, sizeBlur);
 };
 
 
