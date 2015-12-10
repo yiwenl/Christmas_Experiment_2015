@@ -5,7 +5,10 @@ var dat = require("dat-gui");
 window.params = {
 	yDistance:50,
 	numPortraits:6,
-	z:200
+	z:200,
+	density:.25,
+	weight:.1,
+	decay:.85
 };
 
 (function() {
@@ -51,6 +54,9 @@ window.params = {
 		this.gui = new dat.GUI({width:300});
 		this.gui.add(params, 'z', 30.0, 350.0);
 		this.gui.add(params, 'yDistance', 30.0, 350.0);
+		this.gui.add(params, 'density', 0.0, 1.0);
+		this.gui.add(params, 'weight', 0.0, 1.0);
+		this.gui.add(params, 'decay', 0.0, 1.0);
 	};
 
 	p._loop = function() {

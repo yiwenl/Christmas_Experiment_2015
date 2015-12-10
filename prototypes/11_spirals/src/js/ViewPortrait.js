@@ -15,7 +15,7 @@ p.constructor = ViewPortrait;
 p._init = function() {
 	gl = GL.gl;
 	var size = 200;
-	var ratio = 1280/1020;
+	var ratio = 1280/1024;
 	this.mesh = bongiovi.MeshUtils.createPlane(size, size*ratio, 1);
 };
 

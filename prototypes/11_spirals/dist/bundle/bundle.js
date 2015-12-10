@@ -4423,6 +4423,8 @@ dat.utils.common);
 
 var GL = bongiovi.GL, gl;
 var ViewPortrait = require("./ViewPortrait");
+var ViewBlur = require("./ViewBlur");
+var ViewGodRay = require("./ViewGodRay");
 
 function SceneApp() {
 	gl = GL.gl;
@@ -4442,6 +4444,11 @@ var p = SceneApp.prototype = new bongiovi.Scene();
 p._initTextures = function() {
 	console.log('Init Textures');
 
+	this._fboRender = new bongiovi.FrameBuffer(GL.width, GL.height);
+	var blurSize = 512;
+	this._fboBlur0 = new bongiovi.FrameBuffer(blurSize, blurSize);
+	this._fboBlur1 = new bongiovi.FrameBuffer(blurSize, blurSize);
+
 	this._textures = [];
 	for(var i=1; i<=4; i++) {
 		var t = new bongiovi.GLTexture(images['0'+i]);
@@ -4455,26 +4462,136 @@ p._initViews = function() {
 	this._vDotPlane = new bongiovi.ViewDotPlane();
 
 	this._vPortrait = new ViewPortrait();
+	this._vCopy     = new bongiovi.ViewCopy();
+	this._vGodRay 	= new ViewGodRay();
+	this._vBlur 	= new ViewBlur();
 };
 
 p.render = function() {
 	// this._vAxis.render();
 	// this._vDotPlane.render();
+	this._fboRender.bind();
+	GL.clear(0, 0, 0, 0);
 	var angle = Math.PI*2/params.numPortraits;
 	var num = 10;
 	for(var i=-num; i<num; i++) {
 		this._vPortrait.render(this._textures[(i+num)%4], angle*i, i*params.yDistance);	
 	}
+	this._fboRender.unbind();
 	
+	GL.setMatrices(this.cameraOrtho);
+	GL.rotate(this.rotationFront);
+
+	GL.setViewport(0, 0, this._fboBlur0.width, this._fboBlur0.height);
+	this._fboBlur0.bind();
+	GL.clear(0, 0, 0, 0);
+	this._vBlur.render(this._fboRender.getTexture(), true);
+	this._fboBlur0.unbind();
+
+	this._fboBlur1.bind();
+	GL.clear(0, 0, 0, 0);
+	this._vBlur.render(this._fboBlur0.getTexture(), false);
+	this._fboBlur1.unbind();
+
+	GL.setViewport(0, 0, GL.width, GL.height);
+	gl.disable(gl.DEPTH_TEST);
+	GL.enableAdditiveBlending();
+	this._vCopy.render(this._fboRender.getTexture());
+	this._vGodRay.render(this._fboBlur1.getTexture());
+	
+
+
+	gl.enable(gl.DEPTH_TEST);
+	GL.enableAlphaBlending();
 };
 
 p.resize = function() {
 	GL.setSize(window.innerWidth, window.innerHeight);
 	this.camera.resize(GL.aspectRatio);
+
+	this._fboRender = new bongiovi.FrameBuffer(GL.width, GL.height);
+
+	var blurSize = 512;
+	this._fboBlur0 = new bongiovi.FrameBuffer(blurSize, blurSize);
+	this._fboBlur1 = new bongiovi.FrameBuffer(blurSize, blurSize);
 };
 
 module.exports = SceneApp;
-},{"./ViewPortrait":5}],5:[function(require,module,exports){
+},{"./ViewBlur":5,"./ViewGodRay":6,"./ViewPortrait":7}],5:[function(require,module,exports){
+// ViewBlur.js
+
+
+var GL = bongiovi.GL;
+var gl;
+
+
+function ViewBlur() {
+	bongiovi.View.call(this, null, "#define GLSLIFY 1\n// blur.frag\n\n#define SHADER_NAME SIMPLE_TEXTURE\n\nprecision highp float;\nvarying vec2 vTextureCoord;\nuniform vec2 resolution;\nuniform vec2 direction;\nuniform sampler2D texture;\n\n\nvec4 blur13(sampler2D image, vec2 uv, vec2 res, vec2 dir) {\n\tvec4 color = vec4(0.0);\n\tvec2 off1 = vec2(1.411764705882353) * dir;\n\tvec2 off2 = vec2(3.2941176470588234) * dir;\n\tvec2 off3 = vec2(5.176470588235294) * dir;\n\tcolor += texture2D(image, uv) * 0.1964825501511404;\n\tcolor += texture2D(image, uv + (off1 / res)) * 0.2969069646728344;\n\tcolor += texture2D(image, uv - (off1 / res)) * 0.2969069646728344;\n\tcolor += texture2D(image, uv + (off2 / res)) * 0.09447039785044732;\n\tcolor += texture2D(image, uv - (off2 / res)) * 0.09447039785044732;\n\tcolor += texture2D(image, uv + (off3 / res)) * 0.010381362401148057;\n\tcolor += texture2D(image, uv - (off3 / res)) * 0.010381362401148057;\n\treturn color;\n}\n\nvoid main(void) {\n\n\tvec4 texel = blur13(texture, vTextureCoord, resolution, direction);\n    gl_FragColor = texel;\n}");
+}
+
+var p = ViewBlur.prototype = new bongiovi.View();
+p.constructor = ViewBlur;
+
+
+p._init = function() {
+	gl = GL.gl;
+	var positions = [];
+	var coords = [];
+	var indices = []; 
+
+	this.mesh = bongiovi.MeshUtils.createPlane(2, 2, 1);
+};
+
+p.render = function(texture, isVertical) {
+	var dir = isVertical ? [0, 1] : [1, 0];
+	this.shader.bind();
+	this.shader.uniform("texture", "uniform1i", 0);
+	this.shader.uniform("resolution", "uniform2fv", [GL.width, GL.height]);
+	this.shader.uniform("direction", "uniform2fv", dir);
+	texture.bind(0);
+	GL.draw(this.mesh);
+};
+
+module.exports = ViewBlur;
+},{}],6:[function(require,module,exports){
+// ViewGodRay.js
+
+var GL = bongiovi.GL;
+var gl;
+
+
+function ViewGodRay() {
+	this.count = 0;
+	bongiovi.View.call(this, null, "#define GLSLIFY 1\n#define SHADER_NAME SIMPLE_TEXTURE\n\nprecision highp float;\nvarying vec2 vTextureCoord;\nuniform sampler2D texture;\nuniform float time;\nuniform float density;\nuniform float weight;\nuniform float decay;\n\n\nconst vec2 lightPosition = vec2(.5);\nconst float NUM_SAMPLES = 25.0;\n\nfloat hash( vec2 p ) {\n\tfloat h = dot(p,vec2(127.1,311.7));\t\n    return fract(sin(h)*43758.5453123);\n}\n\n\nfloat noise( in vec2 p ) {\n    vec2 i = floor( p );\n    vec2 f = fract( p );\t\n\tvec2 u = f*f*(3.0-2.0*f);\n    return -1.0+2.0*mix( mix( hash( i + vec2(0.0,0.0) ), \n                     hash( i + vec2(1.0,0.0) ), u.x),\n                mix( hash( i + vec2(0.0,1.0) ), \n                     hash( i + vec2(1.0,1.0) ), u.x), u.y);\n}\n\nvec4 godray() {\n\n\tfloat x = cos(time) * .2 + .5;\n\tfloat y = sin(time) * .2 + .5;\n\n\tvec2 deltaTextCoord = vec2(vTextureCoord - vec2(x, y));\n\tvec2 textCoord = vTextureCoord;\n\tdeltaTextCoord *= 1.0/ NUM_SAMPLES * density;\n\tfloat illuminationDecay = 1.0;\n\tvec2 textCoordNoise;\n\tvec4 color = vec4(0.0);\n\n\t\n\tfor(float i=0.0; i<NUM_SAMPLES; i++) {\n\t\ttextCoord -= deltaTextCoord;\n\t\tvec4 texel = texture2D(texture, textCoord);\n\t\ttexel *= illuminationDecay * weight;\n\t\tcolor += texel;\n\n\t\tilluminationDecay *= decay;\n\t}\n\n\n\treturn color;\n}\n\n\nvoid main(void) {\n    gl_FragColor = godray();\n}");
+}
+
+var p = ViewGodRay.prototype = new bongiovi.View();
+p.constructor = ViewGodRay;
+
+
+p._init = function() {
+	gl = GL.gl;
+	var positions = [];
+	var coords = [];
+	var indices = []; 
+
+	this.mesh = bongiovi.MeshUtils.createPlane(2, 2, 1);
+};
+
+p.render = function(texture) {
+	this.count += .03;
+	this.shader.bind();
+	this.shader.uniform("texture", "uniform1i", 0);
+	this.shader.uniform("time", "uniform1f", this.count);
+	this.shader.uniform("density", "uniform1f", params.density);
+	this.shader.uniform("weight", "uniform1f", params.weight);
+	this.shader.uniform("decay", "uniform1f", params.decay);
+	texture.bind(0);
+	GL.draw(this.mesh);
+};
+
+module.exports = ViewGodRay;
+},{}],7:[function(require,module,exports){
 // ViewPortrait.js
 
 var GL = bongiovi.GL;
@@ -4492,7 +4609,7 @@ p.constructor = ViewPortrait;
 p._init = function() {
 	gl = GL.gl;
 	var size = 200;
-	var ratio = 1280/1020;
+	var ratio = 1280/1024;
 	this.mesh = bongiovi.MeshUtils.createPlane(size, size*ratio, 1);
 };
 
@@ -4507,7 +4624,7 @@ p.render = function(texture, rotation, y) {
 };
 
 module.exports = ViewPortrait;
-},{}],6:[function(require,module,exports){
+},{}],8:[function(require,module,exports){
 // app.js
 window.bongiovi = require("./libs/bongiovi.js");
 var dat = require("dat-gui");
@@ -4515,7 +4632,10 @@ var dat = require("dat-gui");
 window.params = {
 	yDistance:50,
 	numPortraits:6,
-	z:200
+	z:200,
+	density:.25,
+	weight:.1,
+	decay:.85
 };
 
 (function() {
@@ -4561,6 +4681,9 @@ window.params = {
 		this.gui = new dat.GUI({width:300});
 		this.gui.add(params, 'z', 30.0, 350.0);
 		this.gui.add(params, 'yDistance', 30.0, 350.0);
+		this.gui.add(params, 'density', 0.0, 1.0);
+		this.gui.add(params, 'weight', 0.0, 1.0);
+		this.gui.add(params, 'decay', 0.0, 1.0);
 	};
 
 	p._loop = function() {
@@ -4571,7 +4694,7 @@ window.params = {
 
 
 new App();
-},{"./SceneApp":4,"./libs/bongiovi.js":7,"dat-gui":1}],7:[function(require,module,exports){
+},{"./SceneApp":4,"./libs/bongiovi.js":9,"dat-gui":1}],9:[function(require,module,exports){
 (function (global){
 (function(f){if(typeof exports==="object"&&typeof module!=="undefined"){module.exports=f()}else if(typeof define==="function"&&define.amd){define([],f)}else{var g;if(typeof window!=="undefined"){g=window}else if(typeof global!=="undefined"){g=global}else if(typeof self!=="undefined"){g=self}else{g=this}g.bongiovi = f()}})(function(){var define,module,exports;return (function e(t,n,r){function s(o,u){if(!n[o]){if(!t[o]){var a=typeof require=="function"&&require;if(!u&&a)return a(o,!0);if(i)return i(o,!0);var f=new Error("Cannot find module '"+o+"'");throw f.code="MODULE_NOT_FOUND",f}var l=n[o]={exports:{}};t[o][0].call(l.exports,function(e){var n=t[o][1][e];return s(n?n:e)},l,l.exports,e,t,n,r)}return n[o].exports}var i=typeof require=="function"&&require;for(var o=0;o<r.length;o++)s(r[o]);return s})({1:[function(_dereq_,module,exports){
 "use strict";
@@ -19239,4 +19362,4 @@ module.exports = ViewDotPlanes;
 
 
 }).call(this,typeof global !== "undefined" ? global : typeof self !== "undefined" ? self : typeof window !== "undefined" ? window : {})
-},{}]},{},[6]);
+},{}]},{},[8]);
