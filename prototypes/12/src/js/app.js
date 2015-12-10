@@ -1,5 +1,5 @@
 // app.js
-window.bongiovi = require("./libs/bongiovi.js");
+window.bongiovi = require("./libs/bongiovi-post.min.js");
 var dat = require("dat-gui");
 
 window.params = {
@@ -22,7 +22,12 @@ window.params = {
 		shininess:.55,
 		roughness:1.0,
 		albedo:.5,
-		ambient:.8
+		ambient:.48
+	},
+
+
+	post: {
+		bloom:.15
 	}
 };
 
@@ -62,7 +67,8 @@ window.params = {
 		this._scene = new SceneApp();
 		bongiovi.Scheduler.addEF(this, this._loop);
 
-		// this.gui = new dat.GUI({width:300});
+		this.gui = new dat.GUI({width:300});
+		this.gui.add(params.post, 'bloom', 0, 1.0);
 
 		require('soundcloud-badge')({
 		    client_id: 'e8b7a335a5321247b38da4ccc07b07a2'
