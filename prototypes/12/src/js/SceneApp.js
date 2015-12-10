@@ -31,8 +31,8 @@ p._initTextures = function() {
 	console.log('Init Textures');
 
 	this._textureBg = new bongiovi.GLTexture(images.bg);
-	this._textureBg1 = new bongiovi.GLTexture(images.bg3);
-	this._textureBg2 = new bongiovi.GLTexture(images.bg2);
+	this._textureBg1 = new bongiovi.GLTexture(images.bg1);
+	this._textureBg2 = new bongiovi.GLTexture(images.bg3);
 	var renderSize = 1024;
 	// this._fboRender = new bongiovi.FrameBuffer(renderSize, renderSize);
 	this._fboRender = new bongiovi.FrameBuffer(GL.width, GL.height);
@@ -88,7 +88,7 @@ p.render = function() {
 	GL.clear(0, 0, 0, 0);
 	this._vBg.render(this._textureBg1, this._textureBg2);
 	this._fboBg.unbind();
-	
+
 
 	GL.setViewport(0, 0, this._fboRender.width, this._fboRender.height);
 

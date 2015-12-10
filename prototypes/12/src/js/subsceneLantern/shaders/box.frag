@@ -74,9 +74,9 @@ void main(void) {
 	vec2 uvEnv = envMapEquirect(N);
 	vec3 colorEnv = texture2D(textureEnv, uvEnv).rgb;
 	color = pow(color, vec3(1.0 / gamma));
-	color += colorEnv * .25;
+	color += colorEnv * .5;
     gl_FragColor = vec4(color, 1.0);
-    gl_FragColor = vec4(colorEnv, 1.0);
+    // gl_FragColor = vec4(colorEnv, 1.0);
     // gl_FragColor = vec4(N * .5 + .5, 1.0);
     // gl_FragColor = texture2D(textureNormal, vUV);
 }
