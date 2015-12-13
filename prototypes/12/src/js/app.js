@@ -1,6 +1,6 @@
 // app.js
 window.bongiovi = require("./libs/bongiovi-post.min.js");
-var dat = require("dat-gui");
+// var dat = require("dat-gui");
 
 window.params = {
 	numParticles:64,
@@ -40,10 +40,8 @@ window.params = {
 		var l = new bongiovi.SimpleImageLoader();
 		var a = [
 			'assets/gold.jpg', 
-			'assets/bg.jpg',
 			'assets/bg1.jpg',
 			'assets/bg2.jpg',
-			'assets/bg3.jpg',
 			'assets/starsmap.jpg',
 			'assets/paperNormal.jpg',
 			"assets/detailHeight.png",
@@ -76,7 +74,7 @@ window.params = {
 
 		this._scene = new SceneApp();
 		bongiovi.Scheduler.addEF(this, this._loop);
-
+/*
 		this.gui = new dat.GUI({width:300});
 		var fTerrain = this.gui.addFolder('terrain');
 		fTerrain.open();
@@ -90,6 +88,9 @@ window.params = {
 		fPost.add(params.post, 'bgOffset', 0, 1.0).listen();
 		fPost.add(params.post, 'bloom', 0, 1.0);
 		fPost.add(params.post, 'gamma', 0, 3.0);
+*/
+
+
 //*/
 		require('soundcloud-badge')({
 		    client_id: 'e8b7a335a5321247b38da4ccc07b07a2'

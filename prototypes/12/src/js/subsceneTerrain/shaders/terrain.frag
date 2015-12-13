@@ -22,7 +22,6 @@ varying vec3 vEye;
 varying vec3 vVertex;
 
 const vec3 FOG_COLOR = vec3(243.0, 230.0, 214.0)/255.0;
-const vec3 FLOOR_COLOR = vec3(230.0, 227.0, 222.0)/255.0;
 
 
 const float PI = 3.151592657;
@@ -71,11 +70,11 @@ vec2 envMapEquirect(vec3 wcNormal) {
 
 
 void main(void) {
-	gl_FragColor = vec4(FLOOR_COLOR, 1.0);
+	// gl_FragColor = vec4(FLOOR_COLOR, 1.0);
 
 	//	GET NORMAL
 	vec3 N       = texture2D(textureNormal, vTextureCoord).rgb;
-	N            += (texture2D(textureNoise, vTextureCoord*15.0).rgb - vec3(.5))* bumpOffset;
+	N            += (texture2D(textureNoise, vTextureCoord*25.0).rgb - vec3(.5))* bumpOffset;
 	N            = normalize(N);
 
 	//	GET LIGHT
@@ -93,18 +92,14 @@ void main(void) {
 	vec3 colorEnv = texture2D(textureEnv, uvEnv).rgb;
 
 
-	gl_FragColor.rgb = ambient + lightColor/255.0 * (diffuse + specular);
-
-
-	gl_FragColor.rgb += colorEnv*.3;
+	gl_FragColor = vec4(ambient + lightColor/255.0 * (diffuse + specular), 1.0);
+	gl_FragColor.rgb += colorEnv*.5;
 	gl_FragColor.rgb = pow(gl_FragColor.rgb, vec3(1.0 / gamma));
-	gl_FragColor.rgb = mix(gl_FragColor.rgb, FOG_COLOR, vDepth);
+	float d = pow(vDepth+.15, 4.0);
+	gl_FragColor.rgb = mix(gl_FragColor.rgb, FOG_COLOR, d);
 
-
-	// float maxRange = 1100.0;
-	// float range = 300.0;
-	// float d = length(vVertex);
-	// float a = smoothstep(maxRange-range, maxRange, d);
-	// gl_FragColor *= (1.0 - a);
-	// gl_FragColor.rgb = vec3(vDepth);
+	float r = length(vVertex);
+	r = 1.0-smoothstep(1400.0, 1500.0, r);
+	gl_FragColor.a *= r;
+	// gl_FragColor.rgb = vec3();
 }

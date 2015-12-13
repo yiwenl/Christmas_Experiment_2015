@@ -77,7 +77,7 @@ void main(void) {
 		float hill = 1.0 - d/hillRadius;
 		hill = sin(hill * PI * .5);
 		hill = pow(hill, 2.0);
-		grey += hill * 0.7;
+		grey += hill * 0.45;
 	}
 
 	float p = sin(vTextureCoord.x * PI) * sin(vTextureCoord.y * PI);

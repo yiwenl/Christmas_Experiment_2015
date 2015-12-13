@@ -52,9 +52,8 @@ p.setState = function(index) {
 p._initTextures = function() {
 	console.log('Init Textures');
 
-	this._textureBg = new bongiovi.GLTexture(images.bg);
 	this._textureBg1 = new bongiovi.GLTexture(images.bg1);
-	this._textureBg2 = new bongiovi.GLTexture(images.bg3);
+	this._textureBg2 = new bongiovi.GLTexture(images.bg2);
 	var renderSize = 1024;
 	// this._fboRender = new bongiovi.FrameBuffer(renderSize, renderSize);
 	this._fboRender = new bongiovi.FrameBuffer(GL.width, GL.height);
@@ -104,11 +103,15 @@ p.render = function() {
 
 
 	this.count += .01;
-	params.post.bgOffset = Math.sin(this.count) * .5 + .5;
+	var a = this.camera._ry.value;
+	while(a < 0) {
+		a += Math.PI * 2.0;
+	}
+	// a /= Math.PI * 2.0;
+	a = Math.sin(a) * .5 + .5;
+	params.post.bgOffset = a;
 	this._update();
 
-
-//*/
 	GL.setMatrices(this.cameraOrtho);
 	GL.rotate(this.rotationFront);
 
@@ -130,47 +133,6 @@ p.render = function() {
 	this._subsceneTerrain.render(this._fboBg.getTexture());
 	this._subsceneLantern.render(this._fboBg.getTexture());
 	
-	return;
-
-	//*/
-
-
-	GL.setMatrices(this.cameraOrtho);
-	GL.rotate(this.rotationFront);
-
-	GL.setViewport(0, 0, this._fboBg.width, this._fboBg.height);
-	this._fboBg.bind();
-	GL.clear(0, 0, 0, 0);
-	this._vBg.render(this._textureBg1, this._textureBg2);
-	this._fboBg.unbind();
-
-
-	GL.setViewport(0, 0, this._fboRender.width, this._fboRender.height);
-
-	this._fboRender.bind();
-	GL.clear(0, 0, 0, 1);
-	gl.disable(gl.DEPTH_TEST);
-	this._vCopy.render(this._fboBg.getTexture());
-
-	gl.enable(gl.DEPTH_TEST);
-	GL.setMatrices(this.camera);
-	GL.rotate(this.sceneRotation.matrix);
-	this._subsceneLantern.render(this._fboBg.getTexture());
-	this._subsceneTerrain.render(this._fboBg.getTexture());
-	this._fboRender.unbind();
-
-	GL.setViewport(0, 0, GL.width, GL.height);
-	GL.setMatrices(this.cameraOrtho);
-	GL.rotate(this.rotationFront);
-
-	this._composerBlur.render(this._fboRender.getTexture());
-	this._vPost.textureBlur = this._composerBlur.getTexture();
-
-	GL.enableAdditiveBlending();
-	this._composerPost.render(this._fboRender.getTexture());
-	this._vCopy.render(this._fboRender.getTexture());
-	this._vFxaa.render(this._composerPost.getTexture());
-	GL.enableAlphaBlending();
 };
 
 p.resize = function() {
