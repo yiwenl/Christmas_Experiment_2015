@@ -18,7 +18,7 @@ p._init = function() {
 	gl = GL.gl;
 	// this.mesh = bongiovi.MeshUtils.createSphere(1800, 24);
 	var numSegments = 24;
-	var size = 1500;
+	var size = 1800;
 
 	var positions = [];
 	var coords    = [];
