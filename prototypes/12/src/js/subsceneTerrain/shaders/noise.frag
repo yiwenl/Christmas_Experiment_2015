@@ -58,10 +58,8 @@ mat2 rotate(in float theta) {
 
 void main(void) {   
 	float offset = 5.000;
-	// vec2 uv = contrast(vTextureCoord,  1.0 + time * 100.0);
-	vec2 uv = vec2(.5) + rotate(time) * (vTextureCoord - vec2(.5)) + sin(time+cos(time)) * .01;
-	// uv = contrast(uv, 1.0 );
-	vec3 detail = texture2D(texture, vTextureCoord * detailMapScale).rgb * detailMapHeight;
+	vec2 uv      = vec2(.5) + rotate(time) * (vTextureCoord - vec2(.5)) + sin(time+cos(time)) * .01;
+	vec3 detail  = texture2D(texture, vTextureCoord * detailMapScale).rgb * detailMapHeight;
 	float grey = 0.0;
 
 	float scale = noiseScale;
@@ -72,12 +70,19 @@ void main(void) {
 		uv *= rotation;
 	}
 
+	vec2 hillPos = vec2(.45, .35);
+	float d = distance(vTextureCoord, hillPos);
+	const float hillRadius = .2;
+	if(d < hillRadius) {
+		float hill = 1.0 - d/hillRadius;
+		hill = sin(hill * PI * .5);
+		hill = pow(hill, 2.0);
+		grey += hill * 0.7;
+	}
+
 	float p = sin(vTextureCoord.x * PI) * sin(vTextureCoord.y * PI);
 	p = pow(p, 1.5);
 	grey = mix(grey, -p, .25);
 
-
-	// grey = (grey + 1.0) * 0.5;
 	gl_FragColor = vec4(vec3(grey)+detail*p, 1.0);
-	// gl_FragColor = vec4(vec3(grey), 1.0);
 }

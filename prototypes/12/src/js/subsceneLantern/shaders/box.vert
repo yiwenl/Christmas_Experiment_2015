@@ -21,6 +21,7 @@ varying vec3 vNormal;
 varying vec3 vVertex;
 varying float vOpacity;
 varying float vTime;
+varying float vRotation;
 
 
 vec3 getPos(vec3 value) {
@@ -74,4 +75,5 @@ void main(void) {
 	vNormal.xy         = rotate(vNormal.xy, rz);
 	vTime 			   = time;
 	vUV 			   = aUV;
+	vRotation 		   = rz;
 }

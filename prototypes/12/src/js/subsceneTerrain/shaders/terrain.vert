@@ -46,7 +46,7 @@ float map(float value, float sx, float sy, float tx, float ty) {
 void main(void) {
 	vec2 uv       = aTextureCoord / numTiles + uvOffset;
 	vec3 pos      = getPosition(uv);
-	pos.y 		  += aVertexPosition.y - 100.0;
+	pos.y 		  += aVertexPosition.y - 0.0;
 
 	vec4 mvPosition = uMVMatrix * vec4(pos, 1.0);
 	vec4 V        = uPMatrix * mvPosition;

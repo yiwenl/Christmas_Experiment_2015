@@ -18,7 +18,7 @@ window.params = {
 		noiseScale:.25,
 		lightPos:[500.0, 500.0, 500.0],
 		lightColor:[255.0, 255.0, 255.0],
-		bump:.3,
+		bump:.53,
 		shininess:.55,
 		roughness:1.0,
 		albedo:.5,
@@ -73,14 +73,23 @@ window.params = {
 		bongiovi.Scheduler.addEF(this, this._loop);
 
 		this.gui = new dat.GUI({width:300});
-		this.gui.add(params.post, 'bgOffset', 0, 1.0);
-		this.gui.add(params.post, 'bloom', 0, 1.0);
-		this.gui.add(params.post, 'gamma', 0, 3.0);
+		var fTerrain = this.gui.addFolder('terrain');
+		fTerrain.open();
+		fTerrain.add(params.terrain, 'bump', 0, 1);
+		fTerrain.add(params.terrain, 'shininess', 0, 1);
+		fTerrain.add(params.terrain, 'roughness', 0, 1);
+		fTerrain.add(params.terrain, 'albedo', 0, 1);
+
+		var fPost = this.gui.addFolder('post');
+		fPost.open();
+		fPost.add(params.post, 'bgOffset', 0, 1.0).listen();
+		fPost.add(params.post, 'bloom', 0, 1.0);
+		fPost.add(params.post, 'gamma', 0, 3.0);
 //*/
 		require('soundcloud-badge')({
 		    client_id: 'e8b7a335a5321247b38da4ccc07b07a2'
-		  // , song: 'https://soundcloud.com/rsheehan/rhian-sheehan-la-bo-te-musique'
-		  , song: 'https://soundcloud.com/dee-san/oscillate-01'
+		  , song: 'https://soundcloud.com/rsheehan/rhian-sheehan-la-bo-te-musique'
+		  // , song: 'https://soundcloud.com/dee-san/oscillate-01'
 		  , dark: false
 		  , getFonts: true
 		}, function(err, src, data, div) {
@@ -89,9 +98,21 @@ window.params = {
 		  audio.src = src
 		  audio.play()
 		  audio.loop = true;
-		  audio.volume = 0;
+		  audio.volume = .25;
 		});
 //*/		
+
+		window.addEventListener('keydown', this._onKeyDown.bind(this));
+	};
+
+
+	p._onKeyDown = function(e) {
+		console.log(e.keyCode, e);
+		if(e.keyCode == 48) {	//	state 0
+			this._scene.setState(0);
+		} else if(e.keyCode == 49) {	//	state 1
+			this._scene.setState(1);
+		}
 	};
 
 	p._loop = function() {

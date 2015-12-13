@@ -65,7 +65,7 @@ p.render = function(textureEnv) {
 
 	// return;
 	var numTiles = 2;
-	var size = 2000;
+	var size = 3000;
 	for(var j=0; j<numTiles; j++) {
 		for(var i=0; i<numTiles; i++) {
 			var uvOffset = [i/numTiles, j/numTiles];

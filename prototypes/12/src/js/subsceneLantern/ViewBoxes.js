@@ -31,7 +31,7 @@ p._init = function() {
 		var x = y = z = size;	
 		var ux = i/numParticles;
 		var uy = j/numParticles;
-		var yScale = random(1, 2);
+		var yScale = random(1.25, 2);
 		// var xzScale = random(1, 2);
 		// x *= xzScale;
 		y *= yScale;

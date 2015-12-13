@@ -75,7 +75,7 @@ void main(void) {
 
 	//	GET NORMAL
 	vec3 N       = texture2D(textureNormal, vTextureCoord).rgb;
-	N            += (texture2D(textureNoise, vTextureCoord*5.0).rgb - vec3(.5))* bumpOffset;
+	N            += (texture2D(textureNoise, vTextureCoord*15.0).rgb - vec3(.5))* bumpOffset;
 	N            = normalize(N);
 
 	//	GET LIGHT
