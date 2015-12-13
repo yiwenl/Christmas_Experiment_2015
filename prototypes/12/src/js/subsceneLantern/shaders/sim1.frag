@@ -103,7 +103,7 @@ void main(void) {
 			vec3 vel     = texture2D(texture, vTextureCoord).xyz;
 			vec3 extra   = texture2D(texture, uvExtra).xyz;
 
-			float posOffset = .003 + mix(extra.x, 1.0, .5) * .002;
+			float posOffset = .002 + mix(extra.x, 1.0, .75) * .002;
 			float decreaseRate = .95;
 			float speed = .1;
 

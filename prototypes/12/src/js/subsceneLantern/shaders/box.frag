@@ -55,7 +55,7 @@ void main(void) {
 	vec3 light = vec3(0.0, -10.0+vTextureCoord.y * 5.0, 0.0);
 	light.xy = rotate(light.xy, vRotation);
 	vec3 normalOffset = texture2D(textureNormal, vUV).rgb * 2.0 - 1.0;
-	vec3 N = normalize(vNormal + normalOffset * .5);
+	vec3 N = normalize(vNormal + normalOffset * .85);
 
 	float diff = diffuse(light - vVertex, -N);
 

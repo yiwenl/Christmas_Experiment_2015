@@ -69,7 +69,7 @@ window.params = {
 		this.canvas.className = "Main-Canvas";
 		var options = {
 		    alpha: false,
-		    premultipliedAlpha: false
+		    premultipliedAlpha: true
 		}
 		document.body.appendChild(this.canvas, null, null, options);
 		bongiovi.GL.init(this.canvas);
