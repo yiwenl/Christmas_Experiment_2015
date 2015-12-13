@@ -72,7 +72,7 @@ void main(void) {
 
 	vec2 hillPos = vec2(.45, .35);
 	float d = distance(vTextureCoord, hillPos);
-	const float hillRadius = .2;
+	const float hillRadius = .15;
 	if(d < hillRadius) {
 		float hill = 1.0 - d/hillRadius;
 		hill = sin(hill * PI * .5);

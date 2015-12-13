@@ -6,7 +6,7 @@ var glslify = require("glslify");
 
 function ViewSimulation() {
 	this._count = Math.random() * 0xFF;
-	bongiovi.View.call(this, null, glslify("./shaders/sim.frag"));
+	bongiovi.View.call(this, null, glslify("./shaders/sim1.frag"));
 }
 
 var p = ViewSimulation.prototype = new bongiovi.View();

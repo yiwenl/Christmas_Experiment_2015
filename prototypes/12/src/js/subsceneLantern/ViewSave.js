@@ -25,16 +25,15 @@ p._init = function() {
 	var totalParticles = numParticles * numParticles;
 	console.log('Total Particles : ', totalParticles);
 	var ux, uy;
-	var range = 500.0;
+	var range = 200.0;
 
 	for(var j=0; j<numParticles; j++) {
 		for(var i=0; i<numParticles; i++) {
-			//	r, y, theta
-			var r = random(10, 200);
-			var y = random(-range, range);
-			var t = Math.random() * Math.PI * 2.0;
+			var x = random(-range, range);
+			var y = random(-100, -750);
+			var z = random(-range, range);
 
-			positions.push([r, y, t]);
+			positions.push([x, y, z]);
 
 			ux = i/numParticles-1.0 + .5/numParticles;
 			uy = j/numParticles-1.0 + .5/numParticles;

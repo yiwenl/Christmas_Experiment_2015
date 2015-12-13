@@ -4,6 +4,7 @@ var GL = bongiovi.GL, gl;
 var ViewTerrain = require("./ViewTerrain");
 var ViewNoise = require("./ViewNoise");
 var ViewNormal = require("./ViewNormal");
+var ViewNightSky = require("./ViewNightSky");
 
 function SubsceneTerrain(scene) {
 	gl                 = GL.gl;
@@ -26,6 +27,7 @@ var p = SubsceneTerrain.prototype;
 p._initTextures = function() {
 	this._textureNoise        = new bongiovi.GLTexture(images.noise);
 	this._textureDetailHeight = new bongiovi.GLTexture(images.detailHeight);
+	this._textureStars		  = new bongiovi.GLTexture(images.starsmap);
 
 	var noiseSize             = 512;
 	this._fboNoise            = new bongiovi.FrameBuffer(noiseSize, noiseSize);
@@ -38,6 +40,7 @@ p._initViews = function() {
 	this._vTerrain   = new ViewTerrain();
 	this._vNoise     = new ViewNoise(params.terrain.noise);
 	this._vNormal    = new ViewNormal(params.terrain.terrainNoiseHeight/300*3.0);
+	this._vSky 		 = new ViewNightSky();
 
 
 	GL.setMatrices(this.cameraOtho);
@@ -62,6 +65,9 @@ p.render = function(textureEnv) {
 	// GL.rotate(this.rotationFront);
 
 	// this._vCopy.render(this._fboNoise.getTexture());
+	GL.enableAdditiveBlending();
+	this._vSky.render(this._textureStars);
+	GL.enableAlphaBlending();
 
 	// return;
 	var numTiles = 2;
@@ -72,6 +78,8 @@ p.render = function(textureEnv) {
 			this._vTerrain.render(this._fboNoise.getTexture(), numTiles, size, uvOffset, this._fboNormal.getTexture(), this._textureNoise, this.camera, textureEnv);
 		}
 	}
+
+	
 };
 
 

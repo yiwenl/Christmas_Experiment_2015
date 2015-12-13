@@ -25,12 +25,7 @@ varying float vRotation;
 
 
 vec3 getPos(vec3 value) {
-	vec3 pos;
-
-	pos.y = value.y;
-	pos.x = cos(value.z) * value.x;
-	pos.z = sin(value.z) * value.x;
-	return pos;
+	return value;
 }
 
 vec2 rotate(vec2 value, float a) {
@@ -52,6 +47,7 @@ void main(void) {
 	
 	vec3 posOffsetNext =  texture2D(textureNext, uvPos).rgb;
 	posOffsetNext      = getPos(posOffsetNext);
+
 	if(posOffsetNext.y < posOffset.y) vOpacity = 0.0;
 
 
@@ -59,12 +55,24 @@ void main(void) {
 	float r            = atan(posOffset.z, posOffset.x);
 	float rz 		   = sin(time*mix(uvPos.x, 1.0, .5)) * 0.35;
 	float rotation     = aTextureCoord.x * PI * 2.0 - r;
+
+	const float maxY = 700.0;
+	const float minY = 0.0;
+	const float range = 100.0;
+	if(posOffset.y > maxY-range) {
+		float a = 1.0 - smoothstep(maxY-range, maxY, posOffset.y);
+		vOpacity *= a;
+	}
+	
+	if(posOffset.y < minY) {
+		float a = smoothstep(minY-range, minY, posOffset.y);
+		vOpacity *= a;
+	}
 	
 	pos.xz             = rotate(pos.xz, rotation);
 	pos.xy             = rotate(pos.xy, rz);
 	vVertex            = vec3(pos);
 
-	pos.y 			   += 250.0;
 	pos                += posOffset;
 	gl_Position        = uPMatrix * uMVMatrix * vec4(pos, 1.0);
 	

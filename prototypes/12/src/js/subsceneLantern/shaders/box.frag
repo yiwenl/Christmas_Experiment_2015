@@ -80,7 +80,9 @@ void main(void) {
 
 	vec2 uvEnv = envMapEquirect(N);
 	vec3 colorEnv = texture2D(textureEnv, uvEnv).rgb;
-	color = pow(color, vec3(1.0 / gamma));
+	
 	color += colorEnv * .75;
-    gl_FragColor = vec4(color, 1.0);
+	color = pow(color, vec3(1.0 / gamma));
+    gl_FragColor = vec4(color, pow(vOpacity, 2.0));
+    // gl_FragColor *= vOpacity;
 }

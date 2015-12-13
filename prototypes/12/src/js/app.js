@@ -44,6 +44,7 @@ window.params = {
 			'assets/bg1.jpg',
 			'assets/bg2.jpg',
 			'assets/bg3.jpg',
+			'assets/starsmap.jpg',
 			'assets/paperNormal.jpg',
 			"assets/detailHeight.png",
 			"assets/noise.png",
@@ -66,7 +67,11 @@ window.params = {
 		this.canvas.width = window.innerWidth;
 		this.canvas.height = window.innerHeight;
 		this.canvas.className = "Main-Canvas";
-		document.body.appendChild(this.canvas);
+		var options = {
+		    alpha: false,
+		    premultipliedAlpha: false
+		}
+		document.body.appendChild(this.canvas, null, null, options);
 		bongiovi.GL.init(this.canvas);
 
 		this._scene = new SceneApp();
@@ -103,6 +108,7 @@ window.params = {
 //*/		
 
 		window.addEventListener('keydown', this._onKeyDown.bind(this));
+		this._scene.setState(1);
 	};
 
 

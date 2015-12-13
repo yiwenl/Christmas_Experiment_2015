@@ -43,9 +43,9 @@ p.setState = function(index) {
 		this.camera.radius.value = 1200;
 		this.cameraOffset.set(0, 0, 0);
 	} else if(index == 1) {
-		this.cameraTarget.set(0, 0, 0);
+		this.cameraTarget.set(0, -100, 0);
 		this.camera.radius.value = 600;
-		this.cameraOffset.set(0, -150, 0);
+		this.cameraOffset.set(0, -50, 0);
 	}
 };
 
@@ -126,8 +126,10 @@ p.render = function() {
 	gl.enable(gl.DEPTH_TEST);
 	GL.setMatrices(this.camera);
 	GL.rotate(this.sceneRotation.matrix);
-	this._subsceneLantern.render(this._fboBg.getTexture());
+	
 	this._subsceneTerrain.render(this._fboBg.getTexture());
+	this._subsceneLantern.render(this._fboBg.getTexture());
+	
 	return;
 
 	//*/
