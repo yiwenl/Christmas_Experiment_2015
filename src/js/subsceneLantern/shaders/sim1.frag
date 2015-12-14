@@ -90,10 +90,7 @@ void main(void) {
 			vec3 vel = texture2D(texture, uvVel).xyz;
 			pos += vel;
 			if(pos.y > maxHeight) {
-				// pos.y = -rand(vec2(time,vTextureCoord.x+vTextureCoord.y)) * 100.0;
 				pos.y = -100.0;
-				// const float radius = 400.0;
-
 				float radius = 300.0 * rand(vTextureCoord*time);
 				float theta = rand(vTextureCoord.yx*time) * PI * 2.0;
 
@@ -114,7 +111,7 @@ void main(void) {
 
 			float ax = snoise(pos.xyz * posOffset + time) * speed;
 			float ay = (snoise(pos.yzx * posOffset + time)*.5+.5) * speed;
-			float az = snoise(pos.zyx * posOffset + time) * speed;
+			float az = snoise(pos.zxy * posOffset + time) * speed;
 
 			vel += vec3(ax, ay, az) * skipCount;
 			vel *= decreaseRate;

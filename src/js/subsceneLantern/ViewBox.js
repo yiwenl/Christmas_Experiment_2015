@@ -51,6 +51,8 @@ p.render = function(textureMap, textureNormal, textureEnv) {
 	this.shader.uniform("opacity", "uniform1f", params.lanternOpacity.value);
 	this.shader.uniform("time", "uniform1f", this.count);
 	this.shader.uniform("gamma", "uniform1f", params.gamma);
+	this.shader.uniform("near", "uniform1f", GL.camera.near);
+	this.shader.uniform("far", "uniform1f", GL.camera.far);
 	GL.draw(this.mesh);
 };
 

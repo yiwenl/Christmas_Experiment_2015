@@ -18,8 +18,6 @@ p._init = function() {
 };
 
 p.render = function(texture) {
-	if(!this.shader.isReady() ) return;
-
 	this.shader.bind();
 	this.shader.uniform("texture", "uniform1i", 0);
 	this.shader.uniform("time", "uniform1f", this._count);

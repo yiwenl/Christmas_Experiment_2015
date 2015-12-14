@@ -13,6 +13,8 @@ var ViewBg = require("./ViewBg");
 
 function SceneApp() {
 	this.count = 0;
+	this.movementCount = 0;
+	this.state = 0;
 	gl = GL.gl;
 	bongiovi.Scene.call(this);
 
@@ -28,14 +30,30 @@ function SceneApp() {
 	this.camera._rx.setTo(.1);
 	this.camera._rx.limit(0, .1);
 	this.cameraOffset = new Vec3(0, -30, 0, easing);
+
+	this.target0 = [300, 0, 1000];
+	this.target1 = [0, -200, 0];
+	this.camPos0 = [0, -30, 0];
+	this.camPos1 = [0, 0, 0];
 }
 
 
 var p = SceneApp.prototype = new bongiovi.Scene();
 
 
+p.slerp = function(x, y, p) {	return x + (y-x) * p; };
+
+p.slerpTarget = function(a, b, p) {
+	return [
+		this.slerp(a[0], b[0], p),
+		this.slerp(a[1], b[1], p),
+		this.slerp(a[2], b[2], p)
+	]
+};
+
 
 p.setState = function(index) {
+	this.state = index;
 	console.log('setState', index);
 	var that = this;
 
@@ -48,7 +66,7 @@ p.setState = function(index) {
 	} else if(index == 1) {
 		this.cameraTarget.set(0, -200, 0);
 		this.camera.radius.value = 600;
-		this.cameraOffset.set(0, -50, 0);
+		this.cameraOffset.set(0, 0, 0);
 		params.speed = 1;
 
 		window.setTimeout(function() {
@@ -76,6 +94,11 @@ p._initViews = function() {
 	this._vBg = new ViewBg();
 	this._subsceneLantern = new SubsceneLantern(this);
 	this._subsceneTerrain = new SubsceneTerrain(this);
+
+	var that = this;
+	window.setTimeout(function() {
+		that.setState(1);
+	}, 2000);
 };
 
 p._update = function() {
@@ -83,9 +106,25 @@ p._update = function() {
 };
 
 p.render = function() {
+	if(this.state > 0) {
+		this.movementCount += .002;
+	}
+	this.movementCount = Math.min(this.movementCount, 1.0);
+
+	function exponentialInOut(t) {
+	  return t < 0.5
+	      ? 4.0 * t * t * t
+	      : 0.5 * Math.pow(2.0 * t - 2.0, 3.0) + 1.0;
+	}
+
+	function exponentialIn(t) {
+	  return t == 0.0 ? t : Math.pow(2.0, 10.0 * (t - 1.0));
+	}
 	//	CAMERA 
-	this.camera.center = this.cameraTarget.getValue();
-	this.camera.positionOffset = this.cameraOffset.getValue();
+	// this.camera.center = this.cameraTarget.getValue();
+	var p = exponentialInOut(this.movementCount);
+	this.camera.center = this.slerpTarget(this.target0, this.target1, p);
+	this.camera.positionOffset = this.slerpTarget(this.camPos0, this.camPos1, p);
 
 
 	this.count += .01;

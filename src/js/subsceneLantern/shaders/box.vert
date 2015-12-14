@@ -1,6 +1,6 @@
 // box.vert
 
-#define SHADER_NAME BASIC_VERTEX
+#define SHADER_NAME BOXES_VERT
 
 precision highp float;
 attribute vec3 aVertexPosition;
@@ -14,6 +14,8 @@ uniform mat4 uMVMatrix;
 uniform mat4 uPMatrix;
 uniform float percent;
 uniform float time;
+uniform float near;
+uniform float far;
 
 varying vec2 vUV;
 varying vec2 vTextureCoord;
@@ -22,6 +24,7 @@ varying vec3 vVertex;
 varying float vOpacity;
 varying float vTime;
 varying float vRotation;
+varying float vDepth;
 
 
 vec3 getPos(vec3 value) {
@@ -34,6 +37,11 @@ vec2 rotate(vec2 value, float a) {
 	mat2 r = mat2(c, -s, s, c);
 	return r * value;
 }
+
+float getDepth(float z, float n, float f) {
+	return (2.0 * n) / (f + n - z*(f-n));
+}
+
 
 
 const float PI = 3.141592657;
@@ -69,19 +77,26 @@ void main(void) {
 		vOpacity *= a;
 	}
 	
-	pos.xz             = rotate(pos.xz, rotation);
-	pos.xy             = rotate(pos.xy, rz);
-	vVertex            = vec3(pos);
-
-	pos                += posOffset;
-	gl_Position        = uPMatrix * uMVMatrix * vec4(pos, 1.0);
+	pos.xz          = rotate(pos.xz, rotation);
+	pos.xy          = rotate(pos.xy, rz);
+	vVertex         = vec3(pos);
 	
-	vTextureCoord      = aTextureCoord;
-	vNormal            = aNormal;
+	pos             += posOffset;
 	
-	vNormal.xz         = rotate(vNormal.xz, rotation);
-	vNormal.xy         = rotate(vNormal.xy, rz);
-	vTime 			   = time;
-	vUV 			   = aUV;
-	vRotation 		   = rz;
+	vec4 mvPosition = uMVMatrix * vec4(pos, 1.0);
+	vec4 V          = uPMatrix * mvPosition;
+	gl_Position     = V;
+	
+	float d         = getDepth(V.z/V.w, 10.0, 4000.0);
+	vDepth          = d;
+	
+	
+	vTextureCoord   = aTextureCoord;
+	vNormal         = aNormal;
+	
+	vNormal.xz      = rotate(vNormal.xz, rotation);
+	vNormal.xy      = rotate(vNormal.xy, rz);
+	vTime           = time;
+	vUV             = aUV;
+	vRotation       = rz;
 }

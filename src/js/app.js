@@ -118,9 +118,7 @@ window.params = {
 		// window.addEventListener('keydown', this._onKeyDown.bind(this));
 		// this._scene.setState(1);
 
-		window.setTimeout(function() {
-			that._scene.setState(1);
-		}, 1000);
+		
 	};
 
 
