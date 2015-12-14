@@ -10,6 +10,7 @@ var ViewFXAA = require("./ViewFXAA");
 var ViewBlur = require("./ViewBlur");
 var ViewPost = require("./ViewPost");
 var ViewBg = require("./ViewBg");
+var ViewPostBg = require("./ViewPostBg");
 
 function SceneApp() {
 	this.count = 0;
@@ -92,13 +93,22 @@ p._initViews = function() {
 	console.log('Init Views');
 	this._vCopy = new  bongiovi.ViewCopy();
 	this._vBg = new ViewBg();
+	this._vPostBg = new ViewPostBg();
 	this._subsceneLantern = new SubsceneLantern(this);
 	this._subsceneTerrain = new SubsceneTerrain(this);
 
 	var that = this;
+
+	
+	window.setTimeout(function() {
+		document.body.classList.add('isOpened');
+	}, 200);
+
 	window.setTimeout(function() {
 		that.setState(1);
 	}, 2000);
+
+
 };
 
 p._update = function() {
@@ -152,7 +162,7 @@ p.render = function() {
 	GL.setViewport(0, 0, GL.width, GL.height);
 
 	gl.disable(gl.DEPTH_TEST);
-	this._vCopy.render(this._fboBg.getTexture());
+	this._vPostBg.render(this._fboBg.getTexture());
 
 	gl.enable(gl.DEPTH_TEST);
 	GL.setMatrices(this.camera);

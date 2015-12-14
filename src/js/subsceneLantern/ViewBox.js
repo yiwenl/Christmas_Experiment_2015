@@ -23,7 +23,7 @@ p._init = function() {
 
 	var size = 50;
 
-	this.mesh = bongiovi.MeshUtils.createCube(size, size, size, true);
+	this.mesh = bongiovi.MeshUtils.createCube(size, size*1.5, size, true);
 
 	// this.mesh = new bongiovi.Mesh(positions.length, indices.length, GL.gl.TRIANGLES);
 	// this.mesh.bufferVertex(positions);

@@ -23,8 +23,8 @@ window.params = {
 		bump:.53,
 		shininess:.55,
 		roughness:1.0,
-		albedo:.5,
-		ambient:.28
+		albedo:.35,
+		ambient:.18
 	},
 
 
@@ -67,11 +67,7 @@ window.params = {
 		this.canvas.width = window.innerWidth;
 		this.canvas.height = window.innerHeight;
 		this.canvas.className = "Main-Canvas";
-		var options = {
-		    alpha: false,
-		    premultipliedAlpha: true
-		}
-		document.body.appendChild(this.canvas, null, null, options);
+		document.body.appendChild(this.canvas);
 		bongiovi.GL.init(this.canvas);
 
 		this._scene = new SceneApp();

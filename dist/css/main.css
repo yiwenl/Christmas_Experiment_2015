@@ -21,7 +21,11 @@ h1, h2, h3, h4, text, p {
   height: 100%;
   top: 0px;
   left: 0px;
-  position: absolute; }
+  position: absolute;
+  opacity: 0;
+  transition: opacity 1.5s ease-out; }
+  .isOpened .Main-Canvas {
+    opacity: 1; }
 
 .Sound-Icon {
   color: white;
