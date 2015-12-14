@@ -127,8 +127,6 @@ p.render = function() {
 	this._fboBg.unbind();
 
 	GL.setViewport(0, 0, GL.width, GL.height);
-	// GL.setViewport(0, 0, this._fboRender.width, this._fboRender.height);
-	// this._fboRender.bind();
 
 	gl.disable(gl.DEPTH_TEST);
 	this._vCopy.render(this._fboBg.getTexture());
@@ -139,23 +137,6 @@ p.render = function() {
 	
 	this._subsceneTerrain.render(this._fboBg.getTexture());
 	this._subsceneLantern.render(this._fboBg.getTexture());
-
-	// this._fboRender.unbind();
-
-
-	return;
-	//	post effect
-	console.log('render post');
-
-	gl.disable(gl.DEPTH_TEST);
-	GL.setViewport(0, 0, GL.width, GL.height);
-
-	GL.setMatrices(this.cameraOrtho);
-	GL.rotate(this.rotationFront);
-	// this._composerBlur.render(this._fboRender.getTexture());
-	// this._vCopy.render(this._composerBlur.getTexture());
-	this._vFxaa.render(this._fboRender.getTexture());
-	
 };
 
 p.resize = function() {
