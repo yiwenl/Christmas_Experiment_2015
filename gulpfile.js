@@ -9,11 +9,14 @@ var sass        = require('gulp-ruby-sass');
 var prefix      = require('gulp-autoprefixer');
 var watchify 	= require('watchify');
 var buffer 		= require('vinyl-buffer');
+var rename      = require('gulp-rename');
 var reload      = browserSync.reload;
 
 
 var bundler = watchify(browserify('./src/js/app.js', watchify.args));
-    gulp.task('browserify', bundle);
+gulp.task('browserify', bundle);
+gulp.task('build', bundleProd);
+
 
 bundler.on('update', bundle);     
 
@@ -30,6 +33,14 @@ function bundle() {
 	.pipe(reload({stream: true, once: true}));
 
     return b;
+}
+
+function bundleProd() {
+	return bundle()
+	.pipe(rename({ extname: '.min.js' }))
+	.pipe(uglify())
+	.pipe(gulp.dest('./dist/bundle/'))
+	.pipe(reload({stream: true}));
 }
 
 gulp.task('watch', function() {
@@ -68,3 +79,4 @@ gulp.task('browser-sync', function() {
 });
 
 gulp.task('default', ['browserify', 'sass', 'browser-sync', 'watch']);
+gulp.task('prod', ['build', 'sass', 'browser-sync', 'watch']);
