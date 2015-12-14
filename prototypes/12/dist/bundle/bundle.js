@@ -691,6 +691,8 @@ p._initViews = function() {
 	this._subsceneLantern = new SubsceneLantern(this);
 	this._subsceneTerrain = new SubsceneTerrain(this);
 
+	this._fboRender = new bongiovi.FrameBuffer(GL.width, GL.height);
+
 	var fboBlurSize = 512;
 	var vBlur = new ViewBlur(true);
 	var hBlur = new ViewBlur(false);
@@ -736,6 +738,9 @@ p.render = function() {
 	params.post.bgOffset = a;
 	this._update();
 
+	gl.enable(gl.DEPTH_TEST);
+
+	//	UPDATE BACKGROUND
 	GL.setMatrices(this.cameraOrtho);
 	GL.rotate(this.rotationFront);
 
@@ -746,6 +751,8 @@ p.render = function() {
 	this._fboBg.unbind();
 
 	GL.setViewport(0, 0, GL.width, GL.height);
+	// GL.setViewport(0, 0, this._fboRender.width, this._fboRender.height);
+	// this._fboRender.bind();
 
 	gl.disable(gl.DEPTH_TEST);
 	this._vCopy.render(this._fboBg.getTexture());
@@ -756,6 +763,22 @@ p.render = function() {
 	
 	this._subsceneTerrain.render(this._fboBg.getTexture());
 	this._subsceneLantern.render(this._fboBg.getTexture());
+
+	// this._fboRender.unbind();
+
+
+	return;
+	//	post effect
+	console.log('render post');
+
+	gl.disable(gl.DEPTH_TEST);
+	GL.setViewport(0, 0, GL.width, GL.height);
+
+	GL.setMatrices(this.cameraOrtho);
+	GL.rotate(this.rotationFront);
+	// this._composerBlur.render(this._fboRender.getTexture());
+	// this._vCopy.render(this._composerBlur.getTexture());
+	this._vFxaa.render(this._fboRender.getTexture());
 	
 };
 
@@ -1049,7 +1072,7 @@ window.params = {
 
 
 	p._onKeyDown = function(e) {
-		console.log(e.keyCode, e);
+		// console.log(e.keyCode, e);
 		if(e.keyCode == 48) {	//	state 0
 			this._scene.setState(0);
 		} else if(e.keyCode == 49) {	//	state 1

@@ -114,7 +114,7 @@ window.params = {
 
 
 	p._onKeyDown = function(e) {
-		console.log(e.keyCode, e);
+		// console.log(e.keyCode, e);
 		if(e.keyCode == 48) {	//	state 0
 			this._scene.setState(0);
 		} else if(e.keyCode == 49) {	//	state 1
