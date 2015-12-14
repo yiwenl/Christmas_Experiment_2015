@@ -48,7 +48,7 @@ p.render = function(textureMap, textureNormal, textureEnv) {
 	this.shader.uniform("color", "uniform3fv", [1, 1, 1]);
 	this.shader.uniform("scale", "uniform3fv", [1, 1, 1]);
 	this.shader.uniform("position", "uniform3fv", this.position);
-	this.shader.uniform("opacity", "uniform1f", 1);
+	this.shader.uniform("opacity", "uniform1f", params.lanternOpacity.value);
 	this.shader.uniform("time", "uniform1f", this.count);
 	this.shader.uniform("gamma", "uniform1f", params.gamma);
 	GL.draw(this.mesh);

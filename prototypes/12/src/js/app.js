@@ -10,6 +10,7 @@ window.params = {
 	weight:.1,
 	decay:.85,
 	speed:0,
+	lanternOpacity:new bongiovi.EaseNumber(1, .01),
 
 	terrain: {
 		noise:.3,
@@ -105,7 +106,7 @@ window.params = {
 		  audio.src = src
 		  audio.play()
 		  audio.loop = true;
-		  audio.volume = .0;
+		  audio.volume = 1.0;
 		});
 //*/		
 

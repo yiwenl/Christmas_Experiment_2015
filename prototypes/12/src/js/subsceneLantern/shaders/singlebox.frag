@@ -11,6 +11,7 @@ uniform sampler2D textureNormal;
 uniform sampler2D textureEnv;
 uniform float time;
 uniform float gamma;
+uniform float opacity;
 
 const float PI = 3.141592657;
 const float TwoPI = PI * 2.0;
@@ -79,5 +80,5 @@ void main(void) {
 	
 	color += colorEnv * .75;
 	color = pow(color, vec3(1.0 / gamma));
-    gl_FragColor = vec4(color, 1.0);
+    gl_FragColor = vec4(color, opacity);
 }

@@ -19,7 +19,7 @@ function SceneApp() {
 	window.addEventListener("resize", this.resize.bind(this));
 
 	this.camera.setPerspective(90 * Math.PI/180, GL.aspectRatio, 5, 4000);
-	this.camera.lockRotation(false);
+	// this.camera.lockRotation(false);
 	this.camera.radius.setTo(1200);
 	var easing = .0015;
 	this.camera.radius.setEasing(easing);
@@ -37,17 +37,25 @@ var p = SceneApp.prototype = new bongiovi.Scene();
 
 p.setState = function(index) {
 	console.log('setState', index);
+	var that = this;
 
 	if(index == 0) {
 		this.cameraTarget.set(300, 0, 1000);
 		this.camera.radius.value = 1200;
 		this.cameraOffset.set(0, -30, 0);
 		params.speed = 0;
+		params.lanternOpacity.value = 1;
 	} else if(index == 1) {
 		this.cameraTarget.set(0, -100, 0);
 		this.camera.radius.value = 600;
 		this.cameraOffset.set(0, -50, 0);
 		params.speed = 1;
+
+		window.setTimeout(function() {
+			params.lanternOpacity.value = 0;	
+			that.camera.lockRotation(false);
+		}, 3000);
+		
 	}
 };
 

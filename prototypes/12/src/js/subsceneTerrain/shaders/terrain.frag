@@ -101,5 +101,4 @@ void main(void) {
 	float r = length(vVertex);
 	r = 1.0-smoothstep(1400.0, 1500.0, r);
 	gl_FragColor.a *= r;
-	// gl_FragColor.rgb = vec3();
 }
