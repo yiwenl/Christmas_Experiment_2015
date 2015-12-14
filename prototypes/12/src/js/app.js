@@ -9,6 +9,7 @@ window.params = {
 	density:.10,
 	weight:.1,
 	decay:.85,
+	speed:0,
 
 	terrain: {
 		noise:.3,
@@ -104,12 +105,12 @@ window.params = {
 		  audio.src = src
 		  audio.play()
 		  audio.loop = true;
-		  audio.volume = .25;
+		  audio.volume = .0;
 		});
 //*/		
 
 		window.addEventListener('keydown', this._onKeyDown.bind(this));
-		this._scene.setState(1);
+		// this._scene.setState(1);
 	};
 
 

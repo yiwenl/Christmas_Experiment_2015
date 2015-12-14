@@ -6,6 +6,7 @@ var ViewSave = require("./ViewSave");
 var ViewRender = require("./ViewRender");
 var ViewSimulation = require("./ViewSimulation");
 var ViewBoxes = require("./ViewBoxes");
+var ViewBox = require("./ViewBox");
 
 function SubsceneLantern(scene) {
 	gl                 = GL.gl;
@@ -49,6 +50,7 @@ p._initViews = function() {
 	this._vRender 	= new ViewRender();
 	this._vSim 		= new ViewSimulation();
 	this._vBoxes	= new ViewBoxes();
+	this._vBox 		= new ViewBox();
 
 
 	GL.setMatrices(this.cameraOtho);
@@ -78,7 +80,7 @@ p.updateFbo = function() {
 };
 
 p.update = function() {
-	if(this.count % params.skipCount == 0) {
+	if(this.count % params.skipCount == 0 && params.speed > 0) {
 		this.updateFbo();	
 		this.count = 0;
 	}
@@ -89,6 +91,7 @@ p.update = function() {
 
 
 p.render = function(textureEnv) {
+	this._vBox.render(this._texture, this._textureNormal, textureEnv);
 	this._vBoxes.render(this._fboTarget.getTexture(), this._fboCurrent.getTexture(), this._texture, this.percent, this._textureNormal, textureEnv);
 };
 

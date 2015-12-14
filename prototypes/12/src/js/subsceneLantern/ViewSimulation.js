@@ -24,10 +24,12 @@ p.render = function(texture) {
 	this.shader.uniform("texture", "uniform1i", 0);
 	this.shader.uniform("time", "uniform1f", this._count);
 	this.shader.uniform("skipCount", "uniform1f", params.skipCount);
+	this.shader.uniform("speed", "uniform1f", params.speed.value);
+
 	texture.bind(0);
 	GL.draw(this.mesh);
 
-	this._count += .01;
+	this._count += .02;
 };
 
 module.exports = ViewSimulation;

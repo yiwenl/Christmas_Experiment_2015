@@ -6,6 +6,7 @@ precision highp float;
 varying vec2 vTextureCoord;
 uniform sampler2D texture;
 uniform float time;
+uniform float speed;
 uniform float skipCount;
 
 const float PI = 3.141592657;
@@ -91,9 +92,13 @@ void main(void) {
 			if(pos.y > maxHeight) {
 				// pos.y = -rand(vec2(time,vTextureCoord.x+vTextureCoord.y)) * 100.0;
 				pos.y = -100.0;
-				const float radius = 400.0;
-				pos.x = (rand(vTextureCoord*time)-.5) * radius;
-				pos.z = (rand(vTextureCoord.yx*time)-.5) * radius;
+				// const float radius = 400.0;
+
+				float radius = 200.0 * rand(vTextureCoord*time);
+				float theta = rand(vTextureCoord.yx*time) * PI * 2.0;
+
+				pos.x = cos(theta) * radius;
+				pos.z = sin(theta) * radius;
 			}
 			gl_FragColor = vec4(pos, 1.0);
 		} else {

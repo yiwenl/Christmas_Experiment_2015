@@ -645,13 +645,13 @@ function SceneApp() {
 	this.camera.setPerspective(90 * Math.PI/180, GL.aspectRatio, 5, 4000);
 	this.camera.lockRotation(false);
 	this.camera.radius.setTo(1200);
-	var easing = .015;
+	var easing = .0015;
 	this.camera.radius.setEasing(easing);
 	this.sceneRotation.lock(true);
 	this.cameraTarget = new Vec3(300, 0, 1000, easing);
 	this.camera._rx.setTo(.1);
 	this.camera._rx.limit(0, .1);
-	this.cameraOffset = new Vec3(0, 0, 0, easing);
+	this.cameraOffset = new Vec3(0, -30, 0, easing);
 }
 
 
@@ -665,11 +665,13 @@ p.setState = function(index) {
 	if(index == 0) {
 		this.cameraTarget.set(300, 0, 1000);
 		this.camera.radius.value = 1200;
-		this.cameraOffset.set(0, 0, 0);
+		this.cameraOffset.set(0, -30, 0);
+		params.speed = 0;
 	} else if(index == 1) {
 		this.cameraTarget.set(0, -100, 0);
 		this.camera.radius.value = 600;
 		this.cameraOffset.set(0, -50, 0);
+		params.speed = 1;
 	}
 };
 
@@ -690,32 +692,6 @@ p._initViews = function() {
 	this._vBg = new ViewBg();
 	this._subsceneLantern = new SubsceneLantern(this);
 	this._subsceneTerrain = new SubsceneTerrain(this);
-
-	this._fboRender = new bongiovi.FrameBuffer(GL.width, GL.height);
-
-	var fboBlurSize = 512;
-	var vBlur = new ViewBlur(true);
-	var hBlur = new ViewBlur(false);
-	var passVBlur = new bongiovi.post.Pass(vBlur, fboBlurSize, fboBlurSize);
-	var passHBlur = new bongiovi.post.Pass(hBlur, fboBlurSize, fboBlurSize);
-
-	var fboSize = 1024;
-	this._vPost = new ViewPost();
-	var passPost = new bongiovi.post.Pass(this._vPost, fboSize, fboSize);
-	this._vFxaa = new ViewFXAA();
-	var passFxaa = new bongiovi.post.Pass(this._vFxaa, fboSize, fboSize);
-
-
-	this._composerPost = new bongiovi.post.EffectComposer();
-	this._composerPost.addPass(passPost);
-	// this._composerPost.addPass(passFxaa, fboSize, fboSize);
-
-	
-	this._composerBlur = new bongiovi.post.EffectComposer();
-	this._composerBlur.addPass(passVBlur);
-	// this._composerBlur.addPass(passVBlur);
-	// this._composerBlur.addPass(passHBlur);
-	this._composerBlur.addPass(passHBlur);
 };
 
 p._update = function() {
@@ -772,7 +748,7 @@ p.resize = function() {
 };
 
 module.exports = SceneApp;
-},{"./Vec3":14,"./ViewBg":15,"./ViewBlur":16,"./ViewFXAA":17,"./ViewPost":18,"./subsceneLantern/SubsceneLantern":21,"./subsceneTerrain/SubsceneTerrain":26}],14:[function(require,module,exports){
+},{"./Vec3":14,"./ViewBg":15,"./ViewBlur":16,"./ViewFXAA":17,"./ViewPost":18,"./subsceneLantern/SubsceneLantern":21,"./subsceneTerrain/SubsceneTerrain":27}],14:[function(require,module,exports){
 // Vec3.js
 
 function Vec3(x, y, z, easing) {
@@ -948,6 +924,7 @@ window.params = {
 	density:.10,
 	weight:.1,
 	decay:.85,
+	speed:0,
 
 	terrain: {
 		noise:.3,
@@ -1043,12 +1020,12 @@ window.params = {
 		  audio.src = src
 		  audio.play()
 		  audio.loop = true;
-		  audio.volume = .25;
+		  audio.volume = .0;
 		});
 //*/		
 
 		window.addEventListener('keydown', this._onKeyDown.bind(this));
-		this._scene.setState(1);
+		// this._scene.setState(1);
 	};
 
 
@@ -1087,6 +1064,7 @@ var ViewSave = require("./ViewSave");
 var ViewRender = require("./ViewRender");
 var ViewSimulation = require("./ViewSimulation");
 var ViewBoxes = require("./ViewBoxes");
+var ViewBox = require("./ViewBox");
 
 function SubsceneLantern(scene) {
 	gl                 = GL.gl;
@@ -1130,6 +1108,7 @@ p._initViews = function() {
 	this._vRender 	= new ViewRender();
 	this._vSim 		= new ViewSimulation();
 	this._vBoxes	= new ViewBoxes();
+	this._vBox 		= new ViewBox();
 
 
 	GL.setMatrices(this.cameraOtho);
@@ -1159,7 +1138,7 @@ p.updateFbo = function() {
 };
 
 p.update = function() {
-	if(this.count % params.skipCount == 0) {
+	if(this.count % params.skipCount == 0 && params.speed > 0) {
 		this.updateFbo();	
 		this.count = 0;
 	}
@@ -1170,6 +1149,7 @@ p.update = function() {
 
 
 p.render = function(textureEnv) {
+	this._vBox.render(this._texture, this._textureNormal, textureEnv);
 	this._vBoxes.render(this._fboTarget.getTexture(), this._fboCurrent.getTexture(), this._texture, this.percent, this._textureNormal, textureEnv);
 };
 
@@ -1185,7 +1165,65 @@ p.resize = function() {
 
 
 module.exports = SubsceneLantern;
-},{"./ViewBoxes":22,"./ViewRender":23,"./ViewSave":24,"./ViewSimulation":25}],22:[function(require,module,exports){
+},{"./ViewBox":22,"./ViewBoxes":23,"./ViewRender":24,"./ViewSave":25,"./ViewSimulation":26}],22:[function(require,module,exports){
+// ViewBox.js
+
+var GL = bongiovi.GL;
+var gl;
+
+
+function ViewBox() {
+	this.count = 0;
+	this.position = [-120, 0, 1100];
+	// bongiovi.View.call(this, bongiovi.ShaderLibs.get('generalVert'), bongiovi.ShaderLibs.get('simpleColorFrag'));
+	bongiovi.View.call(this, "#define GLSLIFY 1\n// singlebox.vert\n\n#define SHADER_NAME BASIC_VERTEX\n\nprecision highp float;\nattribute vec3 aVertexPosition;\nattribute vec3 aNormal;\nattribute vec2 aTextureCoord;\n\nuniform mat4 uMVMatrix;\nuniform mat4 uPMatrix;\nuniform\tvec3 position;\n\nvarying vec2 vTextureCoord;\nvarying vec3 vNormal;\nvarying vec3 vVertex;\n\nvec2 rotate(vec2 value, float a) {\n\tfloat c = cos(a);\n\tfloat s = sin(a);\n\tmat2 r = mat2(c, -s, s, c);\n\treturn r * value;\n}\n\nvoid main(void) {\n\tvec3 pos = aVertexPosition;\n\tfloat r = -.15;\n\tpos.xz = rotate(pos.xz, r);\n\n\tvVertex = vec3(pos);\n\n\tpos +=  position;\n    gl_Position = uPMatrix * uMVMatrix * vec4(pos, 1.0);\n    vTextureCoord = aTextureCoord;\n\n    vNormal = aNormal;\n    vNormal.xz = rotate(vNormal.xz, r);\n}", "#define GLSLIFY 1\n// singlebox.frag\n\n#define SHADER_NAME SIMPLE_TEXTURE\n\nprecision mediump float;\nvarying vec2 vTextureCoord;\nvarying vec3 vNormal;\nvarying vec3 vVertex;\nuniform sampler2D textureMap;\nuniform sampler2D textureNormal;\nuniform sampler2D textureEnv;\nuniform float time;\nuniform float gamma;\n\nconst float PI = 3.141592657;\nconst float TwoPI = PI * 2.0;\n\nfloat diffuse(vec3 lightPos, vec3 normal) {\n\tfloat d = max(dot(normal, normalize(lightPos)), 0.0);\n\treturn d;\n}\n\n\nvec3 diffuse(vec3 lightPos, vec3 lightColor, vec3 normal) {\n\treturn diffuse(lightPos, normal) * lightColor;\n}\n\nvec2 envMapEquirect(vec3 wcNormal, float flipEnvMap) {\n  float phi = acos(-wcNormal.y);\n  float theta = atan(flipEnvMap * wcNormal.x, wcNormal.z) + PI;\n  return vec2(theta / TwoPI, phi / PI);\n}\n\nvec2 envMapEquirect(vec3 wcNormal) {\n    return envMapEquirect(wcNormal, -1.0);\n}\n\nvec2 rotate(vec2 value, float a) {\n\tfloat c = cos(a);\n\tfloat s = sin(a);\n\tmat2 r = mat2(c, -s, s, c);\n\treturn r * value;\n}\n\nfloat rand(vec2 co){\n    return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);\n}\n\nconst vec3 LIGHT = vec3(1.0, 10.0, 10.0);\n\nvoid main(void) {\n    // gl_FragColor = texture2D(texture, vTextureCoord);\n\n    vec3 light = vec3(0.0, -50.0, 0.0);\n\tvec3 normalOffset = texture2D(textureNormal, vTextureCoord).rgb * 2.0 - 1.0;\n\tvec3 N = normalize(vNormal + normalOffset * .85);\n\n\tfloat diff = diffuse(light - vVertex, -N);\n\tfloat g = distance(vVertex, light);\n\tfloat radius = 40.0;\n\n\tg /= radius;\n\tg = smoothstep(0.0, 1.0, 1.0-g);\n\tfloat t = sin(time) * .5 + .5;\n\tfloat t1 = cos(time*.5) * .5 + .5;\n\tt *= t1;\n\tt = mix(1.0, t, .8) ;\n\n\tvec2 uv = vTextureCoord;\n\t// uv.x = mod(uv.x + time*.25, 1.0);\n\n\tvec3 color = texture2D(textureMap, uv).rgb;\n\tcolor *= g*t+diff;\n\tcolor *= 2.2 + sin(cos(time*7.89168)*5.3256186 + sin(time*.6372451)) * .2;\n\tcolor *= color;\n\n    vec2 uvEnv = envMapEquirect(N);\n\tvec3 colorEnv = texture2D(textureEnv, uvEnv).rgb;\n\t\n\tcolor += colorEnv * .75;\n\tcolor = pow(color, vec3(1.0 / gamma));\n    gl_FragColor = vec4(color, 1.0);\n}");
+}
+
+var p = ViewBox.prototype = new bongiovi.View();
+p.constructor = ViewBox;
+
+
+p._init = function() {
+	gl = GL.gl;
+	// var positions = [];
+	// var coords = [];
+	// var indices = []; 
+
+	var size = 50;
+
+	this.mesh = bongiovi.MeshUtils.createCube(size, size, size, true);
+
+	// this.mesh = new bongiovi.Mesh(positions.length, indices.length, GL.gl.TRIANGLES);
+	// this.mesh.bufferVertex(positions);
+	// this.mesh.bufferTexCoords(coords);
+	// this.mesh.bufferIndices(indices);
+};
+
+p.render = function(textureMap, textureNormal, textureEnv) {
+	this.count += .01;
+	this.position[1] = Math.sin(this.count) * 6 + Math.cos(this.count*1.732) * 5 - 90;
+	this.shader.bind();
+	// this.shader.uniform("texture", "uniform1i", 0);
+	// texture.bind(0);
+
+	this.shader.uniform("textureMap", "uniform1i", 0);
+	textureMap.bind(0);
+	this.shader.uniform("textureNormal", "uniform1i", 1);
+	textureNormal.bind(1);
+	this.shader.uniform("textureEnv", "uniform1i", 2);
+	textureEnv.bind(2);
+
+	this.shader.uniform("color", "uniform3fv", [1, 1, 1]);
+	this.shader.uniform("scale", "uniform3fv", [1, 1, 1]);
+	this.shader.uniform("position", "uniform3fv", this.position);
+	this.shader.uniform("opacity", "uniform1f", 1);
+	this.shader.uniform("time", "uniform1f", this.count);
+	this.shader.uniform("gamma", "uniform1f", params.gamma);
+	GL.draw(this.mesh);
+};
+
+module.exports = ViewBox;
+},{}],23:[function(require,module,exports){
 // ViewBoxes.js
 
 var GL = bongiovi.GL;
@@ -1446,7 +1484,7 @@ p.render = function(texture, textureNext, textureMap, percent, textureNormal, te
 };
 
 module.exports = ViewBoxes;
-},{}],23:[function(require,module,exports){
+},{}],24:[function(require,module,exports){
 // ViewRender.js
 var GL = bongiovi.GL;
 var gl;
@@ -1504,7 +1542,7 @@ p.render = function(texture, textureMap) {
 };
 
 module.exports = ViewRender;
-},{}],24:[function(require,module,exports){
+},{}],25:[function(require,module,exports){
 // ViewSave.js
 
 var GL = bongiovi.GL;
@@ -1571,7 +1609,7 @@ p.render = function() {
 };
 
 module.exports = ViewSave;
-},{}],25:[function(require,module,exports){
+},{}],26:[function(require,module,exports){
 // ViewSimulation.js
 
 var GL = bongiovi.GL;
@@ -1580,7 +1618,7 @@ var gl;
 
 function ViewSimulation() {
 	this._count = Math.random() * 0xFF;
-	bongiovi.View.call(this, null, "#define GLSLIFY 1\n// sim1.frag\n\n#define SHADER_NAME SIMPLE_TEXTURE\n\nprecision highp float;\nvarying vec2 vTextureCoord;\nuniform sampler2D texture;\nuniform float time;\nuniform float skipCount;\n\nconst float PI = 3.141592657;\n\nvec4 permute(vec4 x) { return mod(((x*34.00)+1.00)*x, 289.00); }\nvec4 taylorInvSqrt(vec4 r) { return 1.79 - 0.85 * r; }\n\nfloat snoise(vec3 v){\n\tconst vec2 C = vec2(1.00/6.00, 1.00/3.00) ;\n\tconst vec4 D = vec4(0.00, 0.50, 1.00, 2.00);\n\t\n\tvec3 i = floor(v + dot(v, C.yyy) );\n\tvec3 x0 = v - i + dot(i, C.xxx) ;\n\t\n\tvec3 g = step(x0.yzx, x0.xyz);\n\tvec3 l = 1.00 - g;\n\tvec3 i1 = min( g.xyz, l.zxy );\n\tvec3 i2 = max( g.xyz, l.zxy );\n\t\n\tvec3 x1 = x0 - i1 + 1.00 * C.xxx;\n\tvec3 x2 = x0 - i2 + 2.00 * C.xxx;\n\tvec3 x3 = x0 - 1. + 3.00 * C.xxx;\n\t\n\ti = mod(i, 289.00 );\n\tvec4 p = permute( permute( permute( i.z + vec4(0.00, i1.z, i2.z, 1.00 )) + i.y + vec4(0.00, i1.y, i2.y, 1.00 )) + i.x + vec4(0.00, i1.x, i2.x, 1.00 ));\n\t\n\tfloat n_ = 1.00/7.00;\n\tvec3 ns = n_ * D.wyz - D.xzx;\n\t\n\tvec4 j = p - 49.00 * floor(p * ns.z *ns.z);\n\t\n\tvec4 x_ = floor(j * ns.z);\n\tvec4 y_ = floor(j - 7.00 * x_ );\n\t\n\tvec4 x = x_ *ns.x + ns.yyyy;\n\tvec4 y = y_ *ns.x + ns.yyyy;\n\tvec4 h = 1.00 - abs(x) - abs(y);\n\t\n\tvec4 b0 = vec4( x.xy, y.xy );\n\tvec4 b1 = vec4( x.zw, y.zw );\n\t\n\tvec4 s0 = floor(b0)*2.00 + 1.00;\n\tvec4 s1 = floor(b1)*2.00 + 1.00;\n\tvec4 sh = -step(h, vec4(0.00));\n\t\n\tvec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy ;\n\tvec4 a1 = b1.xzyw + s1.xzyw*sh.zzww ;\n\t\n\tvec3 p0 = vec3(a0.xy,h.x);\n\tvec3 p1 = vec3(a0.zw,h.y);\n\tvec3 p2 = vec3(a1.xy,h.z);\n\tvec3 p3 = vec3(a1.zw,h.w);\n\t\n\tvec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));\n\tp0 *= norm.x;\n\tp1 *= norm.y;\n\tp2 *= norm.z;\n\tp3 *= norm.w;\n\t\n\tvec4 m = max(0.60 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.00);\n\tm = m * m;\n\treturn 42.00 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3) ) );\n}\n\nfloat snoise(float x, float y, float z){\n\treturn snoise(vec3(x, y, z));\n}\n\nfloat rand(vec2 co){\n    return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);\n}\n\n\nconst float maxHeight = 1000.0;\n\nvoid main(void) {\n\tif(vTextureCoord.y < .5) {\n\t\tif(vTextureCoord.x < .5) {\n\t\t\tvec2 uvVel = vTextureCoord + vec2(.5, .0);\n\t\t\tvec3 pos = texture2D(texture, vTextureCoord).xyz;\n\t\t\tvec3 vel = texture2D(texture, uvVel).xyz;\n\t\t\tpos += vel;\n\t\t\tif(pos.y > maxHeight) {\n\t\t\t\t// pos.y = -rand(vec2(time,vTextureCoord.x+vTextureCoord.y)) * 100.0;\n\t\t\t\tpos.y = -100.0;\n\t\t\t\tconst float radius = 400.0;\n\t\t\t\tpos.x = (rand(vTextureCoord*time)-.5) * radius;\n\t\t\t\tpos.z = (rand(vTextureCoord.yx*time)-.5) * radius;\n\t\t\t}\n\t\t\tgl_FragColor = vec4(pos, 1.0);\n\t\t} else {\n\t\t\tvec2 uvPos   = vTextureCoord + vec2(-.5, .0);\n\t\t\tvec2 uvExtra = vTextureCoord + vec2(0.0, 0.5);\n\t\t\tvec3 pos     = texture2D(texture, uvPos).xyz;\n\t\t\tvec3 vel     = texture2D(texture, vTextureCoord).xyz;\n\t\t\tvec3 extra   = texture2D(texture, uvExtra).xyz;\n\n\t\t\tfloat posOffset = .002 + mix(extra.x, 1.0, .75) * .002;\n\t\t\tfloat decreaseRate = .95;\n\t\t\tfloat speed = .1;\n\n\t\t\tfloat ax = snoise(pos.xyz * posOffset + time) * speed;\n\t\t\tfloat ay = (snoise(pos.yzx * posOffset + time)*.5+.5) * speed;\n\t\t\tfloat az = snoise(pos.zxy * posOffset + time) * speed;\n\n\t\t\tvel += vec3(ax, ay, az) * skipCount;\n\t\t\tvel *= decreaseRate;\n\n\t\t\tgl_FragColor = vec4(vel, 1.0);\n\t\t}\n\t} else {\n\t\tgl_FragColor = texture2D(texture, vTextureCoord);\n\t}\n    // gl_FragColor = texture2D(texture, vTextureCoord);\n}");
+	bongiovi.View.call(this, null, "#define GLSLIFY 1\n// sim1.frag\n\n#define SHADER_NAME SIMPLE_TEXTURE\n\nprecision highp float;\nvarying vec2 vTextureCoord;\nuniform sampler2D texture;\nuniform float time;\nuniform float speed;\nuniform float skipCount;\n\nconst float PI = 3.141592657;\n\nvec4 permute(vec4 x) { return mod(((x*34.00)+1.00)*x, 289.00); }\nvec4 taylorInvSqrt(vec4 r) { return 1.79 - 0.85 * r; }\n\nfloat snoise(vec3 v){\n\tconst vec2 C = vec2(1.00/6.00, 1.00/3.00) ;\n\tconst vec4 D = vec4(0.00, 0.50, 1.00, 2.00);\n\t\n\tvec3 i = floor(v + dot(v, C.yyy) );\n\tvec3 x0 = v - i + dot(i, C.xxx) ;\n\t\n\tvec3 g = step(x0.yzx, x0.xyz);\n\tvec3 l = 1.00 - g;\n\tvec3 i1 = min( g.xyz, l.zxy );\n\tvec3 i2 = max( g.xyz, l.zxy );\n\t\n\tvec3 x1 = x0 - i1 + 1.00 * C.xxx;\n\tvec3 x2 = x0 - i2 + 2.00 * C.xxx;\n\tvec3 x3 = x0 - 1. + 3.00 * C.xxx;\n\t\n\ti = mod(i, 289.00 );\n\tvec4 p = permute( permute( permute( i.z + vec4(0.00, i1.z, i2.z, 1.00 )) + i.y + vec4(0.00, i1.y, i2.y, 1.00 )) + i.x + vec4(0.00, i1.x, i2.x, 1.00 ));\n\t\n\tfloat n_ = 1.00/7.00;\n\tvec3 ns = n_ * D.wyz - D.xzx;\n\t\n\tvec4 j = p - 49.00 * floor(p * ns.z *ns.z);\n\t\n\tvec4 x_ = floor(j * ns.z);\n\tvec4 y_ = floor(j - 7.00 * x_ );\n\t\n\tvec4 x = x_ *ns.x + ns.yyyy;\n\tvec4 y = y_ *ns.x + ns.yyyy;\n\tvec4 h = 1.00 - abs(x) - abs(y);\n\t\n\tvec4 b0 = vec4( x.xy, y.xy );\n\tvec4 b1 = vec4( x.zw, y.zw );\n\t\n\tvec4 s0 = floor(b0)*2.00 + 1.00;\n\tvec4 s1 = floor(b1)*2.00 + 1.00;\n\tvec4 sh = -step(h, vec4(0.00));\n\t\n\tvec4 a0 = b0.xzyw + s0.xzyw*sh.xxyy ;\n\tvec4 a1 = b1.xzyw + s1.xzyw*sh.zzww ;\n\t\n\tvec3 p0 = vec3(a0.xy,h.x);\n\tvec3 p1 = vec3(a0.zw,h.y);\n\tvec3 p2 = vec3(a1.xy,h.z);\n\tvec3 p3 = vec3(a1.zw,h.w);\n\t\n\tvec4 norm = taylorInvSqrt(vec4(dot(p0,p0), dot(p1,p1), dot(p2, p2), dot(p3,p3)));\n\tp0 *= norm.x;\n\tp1 *= norm.y;\n\tp2 *= norm.z;\n\tp3 *= norm.w;\n\t\n\tvec4 m = max(0.60 - vec4(dot(x0,x0), dot(x1,x1), dot(x2,x2), dot(x3,x3)), 0.00);\n\tm = m * m;\n\treturn 42.00 * dot( m*m, vec4( dot(p0,x0), dot(p1,x1), dot(p2,x2), dot(p3,x3) ) );\n}\n\nfloat snoise(float x, float y, float z){\n\treturn snoise(vec3(x, y, z));\n}\n\nfloat rand(vec2 co){\n    return fract(sin(dot(co.xy ,vec2(12.9898,78.233))) * 43758.5453);\n}\n\n\nconst float maxHeight = 1000.0;\n\nvoid main(void) {\n\tif(vTextureCoord.y < .5) {\n\t\tif(vTextureCoord.x < .5) {\n\t\t\tvec2 uvVel = vTextureCoord + vec2(.5, .0);\n\t\t\tvec3 pos = texture2D(texture, vTextureCoord).xyz;\n\t\t\tvec3 vel = texture2D(texture, uvVel).xyz;\n\t\t\tpos += vel;\n\t\t\tif(pos.y > maxHeight) {\n\t\t\t\t// pos.y = -rand(vec2(time,vTextureCoord.x+vTextureCoord.y)) * 100.0;\n\t\t\t\tpos.y = -100.0;\n\t\t\t\t// const float radius = 400.0;\n\n\t\t\t\tfloat radius = 200.0 * rand(vTextureCoord*time);\n\t\t\t\tfloat theta = rand(vTextureCoord.yx*time) * PI * 2.0;\n\n\t\t\t\tpos.x = cos(theta) * radius;\n\t\t\t\tpos.z = sin(theta) * radius;\n\t\t\t}\n\t\t\tgl_FragColor = vec4(pos, 1.0);\n\t\t} else {\n\t\t\tvec2 uvPos   = vTextureCoord + vec2(-.5, .0);\n\t\t\tvec2 uvExtra = vTextureCoord + vec2(0.0, 0.5);\n\t\t\tvec3 pos     = texture2D(texture, uvPos).xyz;\n\t\t\tvec3 vel     = texture2D(texture, vTextureCoord).xyz;\n\t\t\tvec3 extra   = texture2D(texture, uvExtra).xyz;\n\n\t\t\tfloat posOffset = .002 + mix(extra.x, 1.0, .75) * .002;\n\t\t\tfloat decreaseRate = .95;\n\t\t\tfloat speed = .1;\n\n\t\t\tfloat ax = snoise(pos.xyz * posOffset + time) * speed;\n\t\t\tfloat ay = (snoise(pos.yzx * posOffset + time)*.5+.5) * speed;\n\t\t\tfloat az = snoise(pos.zxy * posOffset + time) * speed;\n\n\t\t\tvel += vec3(ax, ay, az) * skipCount;\n\t\t\tvel *= decreaseRate;\n\n\t\t\tgl_FragColor = vec4(vel, 1.0);\n\t\t}\n\t} else {\n\t\tgl_FragColor = texture2D(texture, vTextureCoord);\n\t}\n    // gl_FragColor = texture2D(texture, vTextureCoord);\n}");
 }
 
 var p = ViewSimulation.prototype = new bongiovi.View();
@@ -1598,14 +1636,16 @@ p.render = function(texture) {
 	this.shader.uniform("texture", "uniform1i", 0);
 	this.shader.uniform("time", "uniform1f", this._count);
 	this.shader.uniform("skipCount", "uniform1f", params.skipCount);
+	this.shader.uniform("speed", "uniform1f", params.speed.value);
+
 	texture.bind(0);
 	GL.draw(this.mesh);
 
-	this._count += .01;
+	this._count += .02;
 };
 
 module.exports = ViewSimulation;
-},{}],26:[function(require,module,exports){
+},{}],27:[function(require,module,exports){
 // SubsceneTerrain.js
 var GL = bongiovi.GL, gl;
 
@@ -1697,7 +1737,7 @@ p.resize = function(e) {
 
 
 module.exports = SubsceneTerrain;
-},{"./ViewNightSky":27,"./ViewNoise":28,"./ViewNormal":29,"./ViewTerrain":30}],27:[function(require,module,exports){
+},{"./ViewNightSky":28,"./ViewNoise":29,"./ViewNormal":30,"./ViewTerrain":31}],28:[function(require,module,exports){
 // ViewNightSky.js
 var GL = bongiovi.GL;
 var gl;
@@ -1787,7 +1827,7 @@ p.render = function(texture) {
 };
 
 module.exports = ViewNightSky;
-},{}],28:[function(require,module,exports){
+},{}],29:[function(require,module,exports){
 // ViewNoise.js
 
 var GL = bongiovi.GL;
@@ -1831,7 +1871,7 @@ p.render = function(texture) {
 };
 
 module.exports = ViewNoise;
-},{}],29:[function(require,module,exports){
+},{}],30:[function(require,module,exports){
 // ViewNormal.js
 
 var GL = bongiovi.GL;
@@ -1861,7 +1901,7 @@ p.render = function(texture) {
 };
 
 module.exports = ViewNormal;
-},{}],30:[function(require,module,exports){
+},{}],31:[function(require,module,exports){
 // ViewTerrain.js
 
 var GL = bongiovi.GL;

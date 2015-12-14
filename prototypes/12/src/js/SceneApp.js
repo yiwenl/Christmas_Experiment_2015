@@ -21,13 +21,13 @@ function SceneApp() {
 	this.camera.setPerspective(90 * Math.PI/180, GL.aspectRatio, 5, 4000);
 	this.camera.lockRotation(false);
 	this.camera.radius.setTo(1200);
-	var easing = .015;
+	var easing = .0015;
 	this.camera.radius.setEasing(easing);
 	this.sceneRotation.lock(true);
 	this.cameraTarget = new Vec3(300, 0, 1000, easing);
 	this.camera._rx.setTo(.1);
 	this.camera._rx.limit(0, .1);
-	this.cameraOffset = new Vec3(0, 0, 0, easing);
+	this.cameraOffset = new Vec3(0, -30, 0, easing);
 }
 
 
@@ -41,11 +41,13 @@ p.setState = function(index) {
 	if(index == 0) {
 		this.cameraTarget.set(300, 0, 1000);
 		this.camera.radius.value = 1200;
-		this.cameraOffset.set(0, 0, 0);
+		this.cameraOffset.set(0, -30, 0);
+		params.speed = 0;
 	} else if(index == 1) {
 		this.cameraTarget.set(0, -100, 0);
 		this.camera.radius.value = 600;
 		this.cameraOffset.set(0, -50, 0);
+		params.speed = 1;
 	}
 };
 
@@ -66,32 +68,6 @@ p._initViews = function() {
 	this._vBg = new ViewBg();
 	this._subsceneLantern = new SubsceneLantern(this);
 	this._subsceneTerrain = new SubsceneTerrain(this);
-
-	this._fboRender = new bongiovi.FrameBuffer(GL.width, GL.height);
-
-	var fboBlurSize = 512;
-	var vBlur = new ViewBlur(true);
-	var hBlur = new ViewBlur(false);
-	var passVBlur = new bongiovi.post.Pass(vBlur, fboBlurSize, fboBlurSize);
-	var passHBlur = new bongiovi.post.Pass(hBlur, fboBlurSize, fboBlurSize);
-
-	var fboSize = 1024;
-	this._vPost = new ViewPost();
-	var passPost = new bongiovi.post.Pass(this._vPost, fboSize, fboSize);
-	this._vFxaa = new ViewFXAA();
-	var passFxaa = new bongiovi.post.Pass(this._vFxaa, fboSize, fboSize);
-
-
-	this._composerPost = new bongiovi.post.EffectComposer();
-	this._composerPost.addPass(passPost);
-	// this._composerPost.addPass(passFxaa, fboSize, fboSize);
-
-	
-	this._composerBlur = new bongiovi.post.EffectComposer();
-	this._composerBlur.addPass(passVBlur);
-	// this._composerBlur.addPass(passVBlur);
-	// this._composerBlur.addPass(passHBlur);
-	this._composerBlur.addPass(passHBlur);
 };
 
 p._update = function() {
