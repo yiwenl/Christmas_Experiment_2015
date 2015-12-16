@@ -39,7 +39,7 @@ p._initViews = function() {
 	this._vCopy 	 = new bongiovi.ViewCopy();
 	this._vTerrain   = new ViewTerrain();
 	this._vNoise     = new ViewNoise(params.terrain.noise);
-	this._vNormal    = new ViewNormal(params.terrain.terrainNoiseHeight/300*3.0);
+	this._vNormal    = new ViewNormal(params.terrain.terrainNoiseHeight/3000 * 2.0);
 	this._vSky 		 = new ViewNightSky();
 
 

@@ -18,13 +18,13 @@ window.params = {
 		detailMapScale:3.4,
 		detailMapHeight:.25,
 		noiseScale:.25,
-		lightPos:[500.0, 500.0, 500.0],
+		lightPos:[1500.0, 500.0, 1500.0],
 		lightColor:[255.0, 255.0, 255.0],
 		bump:.53,
-		shininess:.55,
+		shininess:.75,
 		roughness:1.0,
-		albedo:.35,
-		ambient:.18
+		albedo:.85,
+		ambient:.35
 	},
 
 
@@ -72,21 +72,21 @@ window.params = {
 
 		this._scene = new SceneApp();
 		bongiovi.Scheduler.addEF(this, this._loop);
-/*
-		this.gui = new dat.GUI({width:300});
-		var fTerrain = this.gui.addFolder('terrain');
-		fTerrain.open();
-		fTerrain.add(params.terrain, 'bump', 0, 1);
-		fTerrain.add(params.terrain, 'shininess', 0, 1);
-		fTerrain.add(params.terrain, 'roughness', 0, 1);
-		fTerrain.add(params.terrain, 'albedo', 0, 1);
 
-		var fPost = this.gui.addFolder('post');
-		fPost.open();
-		fPost.add(params.post, 'bgOffset', 0, 1.0).listen();
-		fPost.add(params.post, 'bloom', 0, 1.0);
-		fPost.add(params.post, 'gamma', 0, 3.0);
-*/
+		// this.gui = new dat.GUI({width:300});
+		// var fTerrain = this.gui.addFolder('terrain');
+		// fTerrain.open();
+		// fTerrain.add(params.terrain, 'bump', 0, 1);
+		// fTerrain.add(params.terrain, 'shininess', 0, 1);
+		// fTerrain.add(params.terrain, 'roughness', 0, 1);
+		// fTerrain.add(params.terrain, 'albedo', 0, 1);
+
+		// var fPost = this.gui.addFolder('post');
+		// fPost.open();
+		// fPost.add(params.post, 'bgOffset', 0, 1.0).listen();
+		// fPost.add(params.post, 'bloom', 0, 1.0);
+		// fPost.add(params.post, 'gamma', 0, 3.0);
+
 		var that = this;
 
 //*/

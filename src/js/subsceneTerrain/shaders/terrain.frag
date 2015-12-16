@@ -159,7 +159,7 @@ const vec3 center_light_color = vec3(199.0, 150.0, 73.0)/255.0;
 
 void main(void) {
 	// gl_FragColor = vec4(1.0);
-	
+
 	//	GET NORMAL
 	vec3 N       = texture2D(textureNormal, vTextureCoord).rgb;
 	N            += (texture2D(textureNoise, vTextureCoord*25.0).rgb - vec3(.5))* bumpOffset;
@@ -171,18 +171,19 @@ void main(void) {
 
 	//	DIFFUSE
 	float diffuse = orenNayarDiffuse(L, vEye, N, roughness, albedo);
-	float diffuseCenter = _diffuse(vVertex, N, vec3(0.0, 200.0, 0.0), 1000.0);
+	// float diffuse = _diffuse(vVertex, N, lightDir, 10000.0);
+	// float diffuseCenter = _diffuse(vVertex, N, vec3(0.0, 200.0, 0.0), 1000.0);
 
 	//	SPECULAR
-	float specular = gaussianSpecular(L, vEye, N, shininess) * .25;
+	float specular = gaussianSpecular(L, vEye, N, shininess);
 
 	//	ENV LIGHT
 	vec2 uvEnv = envMapEquirect(N);
 	vec3 colorEnv = texture2D(textureEnv, uvEnv).rgb;
 
 
-	gl_FragColor = vec4(ambient + lightColor/255.0 * (diffuse + diffuseCenter + specular), 1.0);
-	gl_FragColor.rgb += colorEnv*.5;
+	gl_FragColor = vec4(ambient + lightColor/255.0 * (diffuse + specular), 1.0);
+	gl_FragColor.rgb += colorEnv;
 	gl_FragColor.rgb = pow(gl_FragColor.rgb, vec3(1.0 / gamma));
 	float d = pow(vDepth+.15, 4.0);
 	gl_FragColor.rgb = mix(gl_FragColor.rgb, FOG_COLOR, d);
@@ -192,4 +193,5 @@ void main(void) {
 	float r = length(vVertex);
 	float ar = 1.0-smoothstep(1400.0, 1500.0, r);
 	gl_FragColor.a *= ar;
+	// gl_FragColor.rgb = N * .5 + .5;
 }

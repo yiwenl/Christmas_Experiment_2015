@@ -3,7 +3,7 @@
 var GL = bongiovi.GL;
 var gl;
 var glslify = require("glslify");
-
+var random = function(min, max) { return min + Math.random() * (max - min);	}
 function ViewBox() {
 	this.count = 0;
 	this.position = [-120, 0, 1100];
@@ -23,7 +23,7 @@ p._init = function() {
 
 	var size = 50;
 
-	this.mesh = bongiovi.MeshUtils.createCube(size, size*1.5, size, true);
+	this.mesh = bongiovi.MeshUtils.createCube(size, size*random(1.5, 1.1), size, true);
 
 	// this.mesh = new bongiovi.Mesh(positions.length, indices.length, GL.gl.TRIANGLES);
 	// this.mesh.bufferVertex(positions);
