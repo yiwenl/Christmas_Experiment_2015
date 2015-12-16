@@ -47,14 +47,14 @@ p._initViews = function() {
 	GL.rotate(this.rotationFront);
 
 	this._fboNoise.bind();
-	GL.clear();
+	GL.clear(0, 0, 0, 0);
 	GL.setViewport(0, 0, this._fboNoise.width, this._fboNoise.height);
 	this._vNoise.setNoise(params.terrain.noise);
 	this._vNoise.render(this._textureDetailHeight);
 	this._fboNoise.unbind();
 
 	this._fboNormal.bind();
-	GL.clear();
+	GL.clear(0, 0, 0, 0);
 	this._vNormal.render(this._fboNoise.getTexture());
 	this._fboNormal.unbind();
 };

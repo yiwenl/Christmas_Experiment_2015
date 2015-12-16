@@ -158,8 +158,8 @@ float _diffuse(vec3 pos, vec3 normal, vec3 light, float radius) {
 const vec3 center_light_color = vec3(199.0, 150.0, 73.0)/255.0;
 
 void main(void) {
-	// gl_FragColor = vec4(FLOOR_COLOR, 1.0);
-
+	// gl_FragColor = vec4(1.0);
+	
 	//	GET NORMAL
 	vec3 N       = texture2D(textureNormal, vTextureCoord).rgb;
 	N            += (texture2D(textureNoise, vTextureCoord*25.0).rgb - vec3(.5))* bumpOffset;

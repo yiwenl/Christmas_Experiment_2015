@@ -77,10 +77,11 @@ p.render = function(texture, numTiles, size, uvOffset, textureNormal, textureNoi
 	this.shader.uniform("cameraPos", "uniform3fv", camera.position);
 	this.shader.uniform("texture", "uniform1i", 0);
 	texture.bind(0);
-	this.shader.uniform("textureNormal", "uniform1i", 1);
-	textureNormal.bind(1);
-	this.shader.uniform("textureNoise", "uniform1i", 2);
-	textureNoise.bind(2);
+	
+	this.shader.uniform("textureNoise", "uniform1i", 1);
+	textureNoise.bind(1);
+	this.shader.uniform("textureNormal", "uniform1i", 2);
+	textureNormal.bind(2);
 	this.shader.uniform("textureEnv", "uniform1i", 3);
 	textureEnv.bind(3);
 	if(camera) {
